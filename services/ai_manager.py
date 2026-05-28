@@ -1,0 +1,297 @@
+"""Gestão multi-provider de IA (OpenAI, Anthropic, OpenRouter, Ollama, LM Studio)."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any
+
+import requests
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG = ROOT / "config" / "ai_providers.yaml"
+
+
+class AIManager:
+    def __init__(self, config_path: str | Path | None = None):
+        path = Path(config_path) if config_path else DEFAULT_CONFIG
+        with open(path, encoding="utf-8") as f:
+            self.config = yaml.safe_load(f)
+        self.providers: dict[str, Any] = self.config.get("providers", {})
+
+    def list_enabled_providers(self) -> list[str]:
+        return [n for n, cfg in self.providers.items() if cfg.get("enabled")]
+
+    def list_ready_providers(self) -> list[str]:
+        """Providers habilitados com credenciais válidas ou servidores locais."""
+        ready: list[str] = []
+        bad = ("placeholder", "sua-chave", "sk-sua-chave", "sk-ant-...", "sk-or-v1-...")
+        for name, cfg in self.providers.items():
+            if not cfg.get("enabled"):
+                continue
+            if cfg.get("local") or cfg.get("api_key_optional"):
+                ready.append(name)
+                continue
+            env_name = cfg.get("api_key_env", "")
+            key = os.getenv(env_name, "").strip() if env_name else ""
+            if not key or len(key) < 8:
+                continue
+            low = key.lower()
+            if any(p in low for p in bad):
+                continue
+            ready.append(name)
+        return ready
+
+    def test_provider(self, provider: str, overrides: dict | None = None) -> tuple[bool, str]:
+        """Testa conexão. `overrides` permite testar valores do formulário antes de salvar."""
+        mgr = self
+        if overrides:
+            import copy
+
+            mgr = copy.deepcopy(self)
+            cfg = mgr.providers.setdefault(provider, {})
+            cfg.update({k: v for k, v in overrides.items() if k != "models"})
+            if "models" in overrides:
+                cfg.setdefault("models", {}).update(overrides["models"])
+            cfg["enabled"] = True
+
+        try:
+            text, used = mgr.call(
+                provider=provider,
+                task="rewrite",
+                prompt="Responda apenas: OK",
+                system="Resposta de uma palavra.",
+                max_tokens=10,
+            )
+            return True, f"{used}: {text.strip()[:40]}"
+        except Exception as exc:
+            return False, str(exc)
+
+    def diagnose_provider(self, provider: str, overrides: dict | None = None) -> dict:
+        """Compara configuração vs servidor (URLs, modelos, estado)."""
+        cfg = dict(self.providers.get(provider, {}))
+        if overrides:
+            cfg.update({k: v for k, v in overrides.items() if k != "models"})
+            if "models" in overrides:
+                cfg.setdefault("models", {}).update(overrides["models"])
+
+        report: dict = {
+            "provider": provider,
+            "enabled_saved": bool(self.providers.get(provider, {}).get("enabled")),
+            "checks": [],
+            "ok": True,
+        }
+
+        def add(ok: bool, label: str, expected: str, actual: str, hint: str = "") -> None:
+            report["checks"].append(
+                {"ok": ok, "label": label, "expected": expected, "actual": actual, "hint": hint}
+            )
+            if not ok:
+                report["ok"] = False
+
+        if provider == "lmstudio":
+            base = (cfg.get("base_url") or "http://localhost:1234/v1").rstrip("/")
+            if not base.endswith("/v1"):
+                add(
+                    False,
+                    "URL base (formato)",
+                    "…:1234/v1",
+                    base,
+                    "LM Studio OpenAI-compat usa sufixo /v1 (ex.: http://192.168.50.179:1234/v1)",
+                )
+            model = (cfg.get("models") or {}).get("rewrite", "")
+            try:
+                resp = requests.get(f"{base}/models", timeout=8)
+                resp.raise_for_status()
+                ids = [m.get("id", "") for m in resp.json().get("data", [])]
+                add(True, "Servidor acessível", "HTTP 200", str(resp.status_code))
+                add(
+                    bool(model and model in ids),
+                    "Modelo configurado",
+                    model or "(vazio)",
+                    ", ".join(ids[:5]) or "(nenhum)",
+                    "Use o ID exato listado pelo servidor" if model not in ids else "",
+                )
+            except Exception as exc:
+                add(False, "Servidor acessível", "HTTP 200", str(exc), "Verifique IP, porta e se o servidor está Running")
+            add(
+                report["enabled_saved"],
+                "Provedor habilitado (salvo)",
+                "Sim",
+                "Sim" if report["enabled_saved"] else "Não — marque e clique em Salvar e aplicar",
+            )
+
+        elif provider == "ollama":
+            base = (cfg.get("base_url") or "http://localhost:11434").rstrip("/")
+            port = base.rsplit(":", 1)[-1].split("/")[0]
+            add(
+                port != "1234",
+                "Porta Ollama",
+                "11434 (padrão)",
+                port,
+                "Porta 1234 é do LM Studio — Ollama usa 11434" if port == "1234" else "",
+            )
+            model = (cfg.get("models") or {}).get("rewrite", "")
+            try:
+                resp = requests.get(f"{base}/api/tags", timeout=8)
+                resp.raise_for_status()
+                names = [m.get("name", "") for m in resp.json().get("models", [])]
+                add(True, "Servidor acessível", "HTTP 200", str(resp.status_code))
+                add(
+                    bool(model and any(model in n for n in names)),
+                    "Modelo configurado",
+                    model or "(vazio)",
+                    ", ".join(names[:5]) or "(nenhum)",
+                )
+            except Exception as exc:
+                add(False, "Servidor acessível", "HTTP 200", str(exc))
+
+        return report
+
+    def get_model(self, provider: str, task: str) -> str | None:
+        cfg = self.providers.get(provider, {})
+        models = cfg.get("models") or {}
+        if task in models:
+            return models[task]
+        if task == "blog_long" and "rewrite" in models:
+            return models["rewrite"]
+        return models.get(task)
+
+    def call(
+        self,
+        task: str,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int = 3500,
+        provider: str | None = None,
+    ) -> tuple[str, str]:
+        """
+        Chama um provider. Retorna (texto, nome_do_provider_usado).
+        Se provider for None, tenta todos os habilitados em ordem.
+        """
+        order = [provider] if provider else list(self.providers.keys())
+        errors: list[str] = []
+
+        for name in order:
+            if name is None:
+                continue
+            cfg = self.providers.get(name, {})
+            if not cfg:
+                errors.append(f"{name}: provedor desconhecido")
+                continue
+            if not cfg.get("enabled"):
+                if provider:
+                    errors.append(f"{name}: desabilitado — marque o checkbox e salve")
+                continue
+            model = self.get_model(name, task)
+            if not model:
+                continue
+            try:
+                text = self._dispatch(name, cfg, model, prompt, system, max_tokens)
+                return text, name
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+                continue
+
+        raise RuntimeError("Nenhum provedor respondeu. " + "; ".join(errors[:4]))
+
+    def _dispatch(
+        self,
+        name: str,
+        cfg: dict,
+        model: str,
+        prompt: str,
+        system: str | None,
+        max_tokens: int,
+    ) -> str:
+        if name == "openai":
+            return self._openai_chat(cfg, model, prompt, system, max_tokens)
+        if name == "anthropic":
+            return self._anthropic_chat(cfg, model, prompt, system, max_tokens)
+        if name == "openrouter" or name == "lmstudio":
+            return self._openai_compatible(cfg, model, prompt, system, max_tokens)
+        if name == "ollama":
+            return self._ollama_chat(cfg, model, prompt, system, max_tokens)
+        raise ValueError(f"Provider desconhecido: {name}")
+
+    def _resolve_api_key(self, cfg: dict) -> str:
+        env_name = cfg.get("api_key_env", "API_KEY")
+        key = os.getenv(env_name, "").strip() if env_name else ""
+        if key:
+            return key
+        if cfg.get("api_key_optional") or cfg.get("local"):
+            return cfg.get("default_api_key", "not-needed")
+        raise ValueError(f"Variável {env_name} não definida")
+
+    def _api_key(self, cfg: dict) -> str:
+        return self._resolve_api_key(cfg)
+
+    def _messages(self, prompt: str, system: str | None) -> list[dict]:
+        msgs: list[dict] = []
+        if system:
+            msgs.append({"role": "system", "content": system})
+        msgs.append({"role": "user", "content": prompt})
+        return msgs
+
+    def _openai_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=self._api_key(cfg), base_url=cfg.get("base_url"))
+        r = client.chat.completions.create(
+            model=model,
+            messages=self._messages(prompt, system),
+            max_tokens=max_tokens,
+            temperature=0.6,
+        )
+        return r.choices[0].message.content or ""
+
+    def _anthropic_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+        from anthropic import Anthropic
+
+        client = Anthropic(api_key=self._api_key(cfg))
+        kwargs: dict = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system:
+            kwargs["system"] = system
+        r = client.messages.create(**kwargs)
+        return r.content[0].text
+
+    def _openai_compatible(self, cfg, model, prompt, system, max_tokens) -> str:
+        headers = {
+            "Authorization": f"Bearer {self._api_key(cfg)}",
+            "Content-Type": "application/json",
+        }
+        headers.update(cfg.get("extra_headers") or {})
+        url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
+        resp = requests.post(
+            url,
+            headers=headers,
+            json={
+                "model": model,
+                "messages": self._messages(prompt, system),
+                "max_tokens": max_tokens,
+                "temperature": 0.6,
+            },
+            timeout=180,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"] or ""
+
+    def _ollama_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+        base = cfg.get("base_url", "http://localhost:11434").rstrip("/")
+        resp = requests.post(
+            f"{base}/api/chat",
+            json={
+                "model": model,
+                "messages": self._messages(prompt, system),
+                "stream": False,
+                "options": {"num_predict": max_tokens},
+            },
+            timeout=180,
+        )
+        resp.raise_for_status()
+        return resp.json().get("message", {}).get("content", "")

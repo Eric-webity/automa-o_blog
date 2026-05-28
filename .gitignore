@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual env
+venv/
+.venv/
+env/
+
+# Secrets
+.env
+.env.local
+
+# Output artifacts
+output/*
+!output/.gitkeep
+
+# Local database
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NLP models cache
+.cache/
+models/
+
+# NiceGUI / logs
+.nicegui/

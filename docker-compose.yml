@@ -1,0 +1,13 @@
+services:
+  geo-extractor:
+    build: .
+    ports:
+      - "${GEO_PORT:-8080}:8080"
+    env_file:
+      - .env
+    volumes:
+      - geo_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  geo_data:
