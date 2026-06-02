@@ -41,6 +41,8 @@ class BlogPostPackage:
     generation_mode: str = "standard"
     llm_error: str | None = None
     ai_index: dict = field(default_factory=dict)
+    url_cache_hits: int = 0
+    url_cache_misses: int = 0
 
 
 def _finalize_package(
@@ -55,6 +57,8 @@ def _finalize_package(
     provider_used: str,
     gen_mode: str,
     llm_error: str | None,
+    url_cache_hits: int = 0,
+    url_cache_misses: int = 0,
 ) -> BlogPostPackage:
     """Monta BlogPostPackage a partir do corpo e metadados."""
     if not meta:
@@ -80,6 +84,8 @@ def _finalize_package(
         generation_mode=gen_mode,
         llm_error=llm_error,
         ai_index=ai_index,
+        url_cache_hits=url_cache_hits,
+        url_cache_misses=url_cache_misses,
     )
 
 
@@ -133,7 +139,7 @@ def generate_blog_post(
     manager: AIManager | None = None,
 ) -> BlogPostPackage:
     """Gera matéria de forma síncrona."""
-    insights, _, geo, ai_index, skeleton = prepare_geo_context(
+    insights, _, geo, ai_index, skeleton, url_stats = prepare_geo_context(
         brief, use_advanced=use_advanced
     )
     system = build_system_prompt()
@@ -174,4 +180,6 @@ def generate_blog_post(
         provider_used=provider_used,
         gen_mode=gen_mode,
         llm_error=llm_error,
+        url_cache_hits=url_stats.cache_hits,
+        url_cache_misses=url_stats.cache_misses,
     )

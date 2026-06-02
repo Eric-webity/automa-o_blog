@@ -38,3 +38,39 @@ class Article(Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class User(Base):
+    """Conta local do Content Studio."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class BlogProfile(Base):
+    """Perfil do utilizador e metadados do blog local (registo único)."""
+
+    __tablename__ = "blog_profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    phone: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    bio: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    title: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

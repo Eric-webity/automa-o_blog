@@ -5,7 +5,7 @@ from __future__ import annotations
 from core.ai_index_builder import build_ai_index
 from core.geo_engine import GeoInputs, generate_geo_skeleton
 from core.insight_extractor import ArticleInsight, extract_insights, merge_insights
-from services.article_fetcher import fetch_many
+from services.article_fetcher import UrlFetchStats, fetch_many_with_stats
 from services.blog.brief import BlogBrief
 from services.blog.length import expand_skeleton_for_long
 
@@ -25,11 +25,12 @@ def build_geo_inputs(brief: BlogBrief, merged: dict[str, str]) -> GeoInputs:
 def collect_reference_insights(
     brief: BlogBrief,
     use_advanced: bool = True,
-) -> tuple[list[ArticleInsight], dict[str, str]]:
+) -> tuple[list[ArticleInsight], dict[str, str], UrlFetchStats]:
     """Obtém insights das URLs de referência e funde metadados editoriais."""
     insights: list[ArticleInsight] = []
+    fetch_stats = UrlFetchStats()
     if brief.reference_urls:
-        fetched = fetch_many(brief.reference_urls)
+        fetched, fetch_stats = fetch_many_with_stats(brief.reference_urls)
         for art in fetched:
             if art.error:
                 continue
@@ -45,17 +46,19 @@ def collect_reference_insights(
     if brief.angle:
         merged["tema_central"] = f"{brief.topic} — {brief.angle}"
 
-    return insights, merged
+    return insights, merged, fetch_stats
 
 
 def prepare_geo_context(
     brief: BlogBrief,
     use_advanced: bool = True,
-) -> tuple[list[ArticleInsight], dict[str, str], GeoInputs, dict, object]:
+) -> tuple[list[ArticleInsight], dict[str, str], GeoInputs, dict, object, UrlFetchStats]:
     """Executa pesquisa completa: insights, índice IA e esqueleto."""
-    insights, merged = collect_reference_insights(brief, use_advanced=use_advanced)
+    insights, merged, fetch_stats = collect_reference_insights(
+        brief, use_advanced=use_advanced
+    )
     geo = build_geo_inputs(brief, merged)
     ai_index = build_ai_index(insights, geo.tema_central)
     skeleton = generate_geo_skeleton(geo)
     skeleton = expand_skeleton_for_long(brief, skeleton)
-    return insights, merged, geo, ai_index, skeleton
+    return insights, merged, geo, ai_index, skeleton, fetch_stats

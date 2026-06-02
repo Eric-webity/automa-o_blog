@@ -66,6 +66,8 @@ class GenerateArticleResponse(BaseModel):
     word_count_target: int
     fallback_reason: str | None = None
     warning: str | None = None
+    similarity_warning: str | None = None
+    warnings: list[str] = Field(default_factory=list)
     artifact_paths: dict[str, str | None]
 
 

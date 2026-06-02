@@ -1,6 +1,6 @@
 """Testes unitários do motor GEO."""
 
-from modules.geo_engine import GeoInputs, generate_geo_skeleton, validate_inputs
+from core.geo_engine import GeoInputs, generate_geo_skeleton, validate_inputs
 
 
 def test_h1_never_contains_selos():

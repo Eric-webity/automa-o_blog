@@ -1,7 +1,7 @@
 """Testes do Índice IA."""
 
-from modules.ai_index_builder import build_ai_index, format_ai_index_for_prompt
-from modules.insight_extractor import ArticleInsight
+from core.ai_index_builder import build_ai_index, format_ai_index_for_prompt
+from core.insight_extractor import ArticleInsight
 
 
 def _sample_insight() -> ArticleInsight:

@@ -33,5 +33,5 @@ providers:
     default_api_key: lm-studio
     base_url: http://127.0.0.1:1234/v1
     models:
-      rewrite: mistralai/ministral-3-3b
-      blog_long: mistralai/ministral-3-3b
+      rewrite: openai/gpt-oss-20b
+      blog_long: openai/gpt-oss-20b

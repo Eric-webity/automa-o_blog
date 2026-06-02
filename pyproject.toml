@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    # Starlette/TestClient: migrar para httpx2 quando atualizar dependências
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Callable
 
 from dotenv import load_dotenv
+from nicegui import ui
 
 from services.ai_manager import AIManager
+from ui.pages.routes import ROUTE_HISTORY
 
 
 @dataclass
@@ -18,22 +20,16 @@ class AppConfig:
     ai_manager: AIManager | None = None
     enabled_providers: list[str] = field(default_factory=list)
     ready_providers: list[str] = field(default_factory=list)
-    _tabs: Any = field(default=None, repr=False)
-    _tab_history: Any = field(default=None, repr=False)
-    open_history_article: Callable[[int], None] | None = field(
-        default=None, repr=False
-    )
+    open_history_article: Callable[[int], None] | None = field(default=None, repr=False)
+    handle_logout: Callable[[], None] | None = field(default=None, repr=False)
 
     def go_history_tab(self) -> None:
-        """Muda para a aba Histórico."""
-        if self._tabs is not None and self._tab_history is not None:
-            self._tabs.value = self._tab_history
+        """Navega para a página de Histórico."""
+        ui.navigate.to(ROUTE_HISTORY)
 
     def open_article_in_history(self, article_id: int) -> None:
-        """Abre matéria no histórico e muda de aba."""
-        self.go_history_tab()
-        if self.open_history_article:
-            self.open_history_article(article_id)
+        """Abre uma matéria específica na página de Histórico."""
+        ui.navigate.to(f"{ROUTE_HISTORY}?article={article_id}")
 
 
 def create_app_config() -> AppConfig:

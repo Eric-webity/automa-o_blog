@@ -1,8 +1,8 @@
 """Testes do gerador de matérias para blog."""
 
-from modules.blog import BlogBrief, generate_blog_post
-from modules.blog.brief import parse_keywords
-from modules.blog.local_writer import slugify
+from services.blog import BlogBrief, generate_blog_post
+from services.blog.brief import parse_keywords
+from services.blog.local_writer import slugify
 
 
 def test_parse_keywords():

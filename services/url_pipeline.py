@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from modules.ai_index_builder import build_ai_index
-from modules.ai_manager import AIManager
-from modules.article_writer import GeneratedArticle, generate_full_article
-from modules.geo_engine import GeoInputs, GeoSkeleton, generate_geo_skeleton
-from modules.insight_extractor import ArticleInsight
+from core.ai_index_builder import build_ai_index
+from core.geo_engine import GeoInputs, GeoSkeleton, generate_geo_skeleton
+from core.insight_extractor import ArticleInsight
+from services.ai_manager import AIManager
+from services.article_writer import GeneratedArticle, generate_full_article
 
 from .storage import save_url_artifacts
 

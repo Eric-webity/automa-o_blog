@@ -6,7 +6,7 @@ import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -17,6 +17,24 @@ logger = logging.getLogger(__name__)
 
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
+
+
+def _migrate_blog_profile_columns(engine: Engine) -> None:
+    """Adiciona colunas de perfil pessoal em bases SQLite já existentes."""
+    insp = inspect(engine)
+    if not insp.has_table("blog_profile"):
+        return
+    existing = {col["name"] for col in insp.get_columns("blog_profile")}
+    additions = {
+        "name": "VARCHAR(200) NOT NULL DEFAULT ''",
+        "email": "VARCHAR(320) NOT NULL DEFAULT ''",
+        "phone": "VARCHAR(50) NOT NULL DEFAULT ''",
+        "bio": "TEXT NOT NULL DEFAULT ''",
+    }
+    with engine.begin() as conn:
+        for column, ddl in additions.items():
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE blog_profile ADD COLUMN {column} {ddl}"))
 
 
 def get_database_url() -> str:
@@ -36,6 +54,7 @@ def init_db() -> None:
         connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(_engine)
+    _migrate_blog_profile_columns(_engine)
     _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     logger.info("Base de dados inicializada em %s", DB_PATH)
 

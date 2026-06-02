@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from core.passwords import hash_password, verify_password
 from db.database import session_scope
-from db.models import Article, ArticleStatus
+from db.models import Article, ArticleStatus, BlogProfile, User
 
 logger = logging.getLogger(__name__)
 
@@ -176,9 +177,191 @@ class ArticleRepository:
         """Conta matérias criadas nos últimos N dias."""
         from datetime import timedelta
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         with session_scope() as session:
             count = session.scalar(
                 select(func.count(Article.id)).where(Article.created_at >= cutoff)
             )
             return int(count or 0)
+
+
+@dataclass
+class BlogProfileRecord:
+    """DTO do perfil (dados pessoais + blog local)."""
+
+    id: int | None
+    name: str
+    email: str
+    phone: str
+    bio: str
+    title: str
+    description: str
+
+
+def _to_profile_record(row: BlogProfile) -> BlogProfileRecord:
+    return BlogProfileRecord(
+        id=row.id,
+        name=row.name,
+        email=row.email,
+        phone=row.phone,
+        bio=row.bio,
+        title=row.title,
+        description=row.description,
+    )
+
+
+class BlogProfileRepository:
+    """Persistência do perfil do blog (registo único)."""
+
+    def get_profile(self) -> BlogProfileRecord | None:
+        """Retorna o perfil salvo ou None se ainda não existir."""
+        with session_scope() as session:
+            row = session.scalars(select(BlogProfile).order_by(BlogProfile.id).limit(1)).first()
+            return _to_profile_record(row) if row else None
+
+    def save_profile(self, record: BlogProfileRecord) -> BlogProfileRecord:
+        """Cria ou atualiza o perfil do blog."""
+        with session_scope() as session:
+            row: BlogProfile | None = None
+            if record.id is not None:
+                row = session.get(BlogProfile, record.id)
+            if row is None:
+                row = session.scalars(
+                    select(BlogProfile).order_by(BlogProfile.id).limit(1)
+                ).first()
+            name = (record.name or "").strip()[:200]
+            email = (record.email or "").strip()[:320]
+            phone = (record.phone or "").strip()[:50]
+            bio = (record.bio or "").strip()
+            title = (record.title or "").strip()[:500]
+            description = (record.description or "").strip()
+            if row is None:
+                row = BlogProfile(
+                    name=name,
+                    email=email,
+                    phone=phone,
+                    bio=bio,
+                    title=title,
+                    description=description,
+                )
+                session.add(row)
+            else:
+                row.name = name
+                row.email = email
+                row.phone = phone
+                row.bio = bio
+                row.title = title
+                row.description = description
+            session.flush()
+            session.refresh(row)
+            return _to_profile_record(row)
+
+
+@dataclass
+class UserRecord:
+    """DTO de utilizador registado."""
+
+    id: int
+    name: str
+    email: str
+
+
+class UserRepository:
+    """Registo e autenticação de contas locais."""
+
+    def get_by_email(self, email: str) -> UserRecord | None:
+        normalized = email.strip().lower()
+        with session_scope() as session:
+            row = session.scalars(
+                select(User).where(func.lower(User.email) == normalized).limit(1)
+            ).first()
+            if not row:
+                return None
+            return UserRecord(id=row.id, name=row.name, email=row.email)
+
+    def email_exists(self, email: str) -> bool:
+        return self.get_by_email(email) is not None
+
+    def create(self, *, name: str, email: str, password: str) -> UserRecord:
+        normalized_email = email.strip().lower()
+        display_name = name.strip()[:200]
+        with session_scope() as session:
+            existing = session.scalars(
+                select(User).where(func.lower(User.email) == normalized_email).limit(1)
+            ).first()
+            if existing:
+                raise ValueError("Este e-mail já está cadastrado.")
+            row = User(
+                name=display_name,
+                email=normalized_email,
+                password_hash=hash_password(password),
+            )
+            session.add(row)
+            session.flush()
+            session.refresh(row)
+            return UserRecord(id=row.id, name=row.name, email=row.email)
+
+    def verify_credentials(self, email: str, password: str) -> UserRecord | None:
+        normalized = email.strip().lower()
+        with session_scope() as session:
+            row = session.scalars(
+                select(User).where(func.lower(User.email) == normalized).limit(1)
+            ).first()
+            if not row or not verify_password(password, row.password_hash):
+                return None
+            return UserRecord(id=row.id, name=row.name, email=row.email)
+
+
+@dataclass
+class UserRecord:
+    """DTO de utilizador registado."""
+
+    id: int
+    name: str
+    email: str
+
+
+class UserRepository:
+    """Registo e autenticação de contas locais."""
+
+    def get_by_email(self, email: str) -> UserRecord | None:
+        normalized = email.strip().lower()
+        with session_scope() as session:
+            row = session.scalars(
+                select(User).where(func.lower(User.email) == normalized).limit(1)
+            ).first()
+            if not row:
+                return None
+            return UserRecord(id=row.id, name=row.name, email=row.email)
+
+    def email_exists(self, email: str) -> bool:
+        return self.get_by_email(email) is not None
+
+    def create(self, *, name: str, email: str, password: str) -> UserRecord:
+        normalized_email = email.strip().lower()
+        display_name = name.strip()[:200]
+        with session_scope() as session:
+            existing = session.scalars(
+                select(User).where(func.lower(User.email) == normalized_email).limit(1)
+            ).first()
+            if existing:
+                raise ValueError("Este e-mail já está cadastrado.")
+            row = User(
+                name=display_name,
+                email=normalized_email,
+                password_hash=hash_password(password),
+            )
+            session.add(row)
+            session.flush()
+            session.refresh(row)
+            return UserRecord(id=row.id, name=row.name, email=row.email)
+
+    def verify_credentials(self, email: str, password: str) -> UserRecord | None:
+        normalized = email.strip().lower()
+        with session_scope() as session:
+            row = session.scalars(
+                select(User).where(func.lower(User.email) == normalized).limit(1)
+            ).first()
+            if not row or not verify_password(password, row.password_hash):
+                return None
+            return UserRecord(id=row.id, name=row.name, email=row.email)

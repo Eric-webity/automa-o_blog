@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from nicegui import ui
 
 
-def page_header(title: str, description: str | None = None) -> None:
-    """Título e descrição padronizados da área principal."""
-    ui.label(title).classes("geo-page-title")
-    if description:
-        ui.label(description).classes("geo-page-desc")
+def page_header(
+    title: str,
+    description: str | None = None,
+    *,
+    eyebrow: str | None = None,
+    actions: Callable[[], None] | None = None,
+) -> None:
+    """
+    Cabeçalho padronizado da área principal (mesmo padrão em todas as páginas).
+
+    eyebrow: pequena etiqueta acima do título (badge).
+    actions: callback para renderizar botões/ações alinhados à direita.
+    """
+    with ui.element("header").classes("geo-page-header w-full"):
+        with ui.element("div").classes("geo-page-header__copy"):
+            if eyebrow:
+                ui.html(f'<span class="geo-page-header__eyebrow">{eyebrow}</span>')
+            ui.label(title).classes("geo-page-title")
+            if description:
+                ui.label(description).classes("geo-page-desc")
+        if actions is not None:
+            with ui.element("div").classes("geo-page-header__actions"):
+                actions()
 
 
 def geo_textarea(

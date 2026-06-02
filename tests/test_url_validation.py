@@ -2,7 +2,7 @@
 
 import pytest
 
-from modules.article_fetcher import URLValidationError, validate_url
+from services.article_fetcher import URLValidationError, validate_url
 
 
 def test_validate_url_accepts_public():

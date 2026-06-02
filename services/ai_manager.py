@@ -191,10 +191,46 @@ class AIManager:
                 text = self._dispatch(name, cfg, model, prompt, system, max_tokens)
                 return text, name
             except Exception as e:
-                errors.append(f"{name}: {e}")
+                errors.append(self._describe_error(name, cfg, e))
                 continue
 
         raise RuntimeError("Nenhum provedor respondeu. " + "; ".join(errors[:4]))
+
+    @staticmethod
+    def _describe_error(name: str, cfg: dict, exc: Exception) -> str:
+        """Converte exceções de provedores em mensagens claras para o usuário."""
+        env_name = cfg.get("api_key_env", "API_KEY")
+        text = str(exc).strip()
+        lowered = text.lower()
+
+        status = getattr(exc, "status_code", None)
+        if status is None:
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", None)
+
+        if "não definida" in lowered or "nao definida" in lowered:
+            return f"{name}: defina {env_name} no .env"
+
+        is_auth = (
+            status == 401
+            or "401" in text
+            or "unauthorized" in lowered
+            or "invalid_api_key" in lowered
+            or "invalid x-api-key" in lowered
+            or "authentication" in exc.__class__.__name__.lower()
+        )
+        if is_auth:
+            return (
+                f"{name}: chave de IA inválida (401) — verifique {env_name} no .env"
+            )
+
+        if status == 429 or "429" in text or "rate limit" in lowered:
+            return f"{name}: limite de requisições atingido (429)"
+
+        if status in (500, 502, 503, 504) or "connection" in lowered or "timeout" in lowered:
+            return f"{name}: provedor indisponível no momento"
+
+        return f"{name}: {text}"
 
     def _dispatch(
         self,

@@ -41,7 +41,7 @@ Organizações precisam de conteúdo **citável por motores generativos** (ChatG
 
 ```
 geo-extractor/
-├── app.py                          # Streamlit (4 abas)
+├── legacy/app.py                   # Streamlit legado (4 abas)
 ├── config/ai_providers.yaml
 ├── skills/                         # Prompts SEO-GEO, audit, blog
 ├── modules/
@@ -126,7 +126,7 @@ python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
 python -m spacy download pt_core_news_lg   # opcional
-python -m streamlit run app.py
+python -m streamlit run legacy/app.py
 ```
 
 `.env`: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, etc., conforme `config/ai_providers.yaml`.

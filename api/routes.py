@@ -143,6 +143,8 @@ async def generate_article(body: GenerateArticleRequest) -> GenerateArticleRespo
         word_count_target=pkg.word_count_target,
         fallback_reason=result.fallback_reason,
         warning=result.warning,
+        similarity_warning=result.similarity_warning,
+        warnings=result.warnings,
         artifact_paths={
             "markdown": result.md_path,
             "meta": result.meta_path,

@@ -17,7 +17,7 @@ from nicegui import ui
 from api import register_api_routes
 from config.paths import DATA_DIR, OUTPUT_DIR
 from db import init_db
-from ui.layout import apply_styles, render_content_studio
+from ui.pages import register_pages
 from ui.state import create_app_config
 
 load_dotenv()
@@ -33,6 +33,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 init_db()
 register_api_routes()
 config = create_app_config()
+register_pages(config)
 
 
 def _is_port_available(port: int, host: str = "0.0.0.0") -> bool:
@@ -71,15 +72,14 @@ def _find_available_port(start: int = 8080, attempts: int = 50) -> int:
     )
 
 
-@ui.page("/")
-def index() -> None:
-    """Página principal do Content Studio."""
-    apply_styles()
-    render_content_studio(config)
-
-
 if __name__ in {"__main__", "__mp_main__"}:
     port = _find_available_port()
     logger.info("GEO Extractor: http://localhost:%s", port)
     print(f"GEO Extractor: http://localhost:{port}")
-    ui.run(title="GEO Extractor", port=port, reload=False, show=True)
+    ui.run(
+        title="GEO Extractor",
+        port=port,
+        reload=False,
+        show=True,
+        storage_secret=os.getenv("GEO_STORAGE_SECRET", "geo-extractor-local-dev"),
+    )
