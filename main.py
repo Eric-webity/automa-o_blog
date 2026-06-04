@@ -16,6 +16,7 @@ from nicegui import ui
 
 from api import register_api_routes
 from config.paths import DATA_DIR, OUTPUT_DIR
+from config.production import resolve_storage_secret
 from db import init_db
 from ui.pages import register_pages
 from ui.state import create_app_config
@@ -81,5 +82,5 @@ if __name__ in {"__main__", "__mp_main__"}:
         port=port,
         reload=False,
         show=True,
-        storage_secret=os.getenv("GEO_STORAGE_SECRET", "geo-extractor-local-dev"),
+        storage_secret=resolve_storage_secret(),
     )

@@ -158,6 +158,7 @@ def write_article_llm(
         system=REWRITE_SYSTEM,
         max_tokens=4000,
         provider=provider,
+        source="url",
     )
     return text, used
 

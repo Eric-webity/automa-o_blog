@@ -8,7 +8,10 @@ from nicegui import run, ui
 
 from config.production import load_production_settings
 from services.analytics import check_api_health, get_dashboard_stats
+from ui.auth import require_session_user_id
+from ui.components.cms_panel import build_cms_panel
 from ui.components.webhook_panel import build_webhook_panel
+from services.ai_usage import format_cost_usd, format_tokens
 from ui.constants import API_ROUTES, article_status_meta, provider_label
 from ui.pages.routes import ROUTE_BLOG, ROUTE_SETTINGS
 from ui.widgets import page_header
@@ -40,6 +43,7 @@ def build_tab_dashboard(config) -> None:
     stats_container = ui.element("div").classes("geo-dash-stats-grid w-full")
     projects_container = ui.element("div").classes("geo-dash-projects-grid w-full")
     integrations_container = ui.column().classes("w-full gap-4")
+    ai_cost_container = ui.element("div").classes("geo-ai-cost-section w-full")
 
     def _header_actions() -> None:
         ui.button(
@@ -72,6 +76,15 @@ def build_tab_dashboard(config) -> None:
                     ).classes("geo-dash-section-desc")
 
             projects_container
+
+        with ui.element("section").classes("w-full"):
+            with ui.element("div").classes("geo-dash-section-header"):
+                with ui.column().classes("gap-0"):
+                    ui.label("Controle de gastos com IA").classes("geo-section-title")
+                    ui.label(
+                        "Tokens e custo estimado por provedor (últimos 30 dias)."
+                    ).classes("geo-dash-section-desc")
+            ai_cost_container
 
         with ui.element("section").classes("geo-dash-integrations w-full"):
             ui.label("Integrações e API").classes("geo-section-title")
@@ -180,10 +193,96 @@ def build_tab_dashboard(config) -> None:
                         "flat round dense color=primary"
                     )
 
+    def _render_ai_cost_panel(ai_usage: dict) -> None:
+        ai_cost_container.clear()
+        week = ai_usage.get("last_7_days") or {}
+        month = ai_usage.get("last_30_days") or {}
+        today = ai_usage.get("today") or {}
+        by_provider = ai_usage.get("by_provider_30d") or []
+        recent = ai_usage.get("recent_calls") or []
+
+        with ai_cost_container:
+            with ui.element("div").classes("geo-ai-cost-grid"):
+                for label, block, icon in (
+                    ("Hoje", today, "today"),
+                    ("7 dias", week, "date_range"),
+                    ("30 dias", month, "calendar_month"),
+                ):
+                    with ui.element("div").classes("geo-ai-cost-card"):
+                        with ui.row().classes("items-center gap-2 mb-2"):
+                            ui.icon(icon, size="sm").classes("text-primary")
+                            ui.label(label).classes("geo-ai-cost-card__label")
+                        ui.label(format_cost_usd(block.get("cost_usd", 0))).classes(
+                            "geo-ai-cost-card__value"
+                        )
+                        ui.label(
+                            f"{format_tokens(block.get('total_tokens', 0))} tokens · "
+                            f"{block.get('calls', 0)} chamada(s)"
+                        ).classes("geo-meta-caption")
+
+                if not ai_usage.get("has_data"):
+                    with ui.element("div").classes("geo-ai-cost-empty"):
+                        ui.icon("insights", size="md").classes("text-grey-6 mb-2")
+                        ui.label(
+                            "Ainda sem registos de IA. Gere matérias com IA ativa "
+                            "para ver tokens e custo estimado aqui."
+                        ).classes("geo-meta-caption")
+
+            if by_provider:
+                ui.label("Por provedor (30 dias)").classes("geo-section-title mt-4 mb-2")
+                max_cost = max((p.get("cost_usd") or 0) for p in by_provider) or 0.0001
+                with ui.element("div").classes("geo-ai-cost-providers w-full"):
+                    for row in by_provider:
+                        pct = min(100, int((row.get("cost_usd") or 0) / max_cost * 100))
+                        name = provider_label(row.get("provider", ""))
+                        with ui.element("div").classes("geo-ai-cost-provider-row"):
+                            with ui.row().classes(
+                                "w-full items-center justify-between gap-2 mb-1"
+                            ):
+                                ui.label(name).classes("text-body2")
+                                ui.label(format_cost_usd(row.get("cost_usd", 0))).classes(
+                                    "text-caption font-medium"
+                                )
+                            with ui.element("div").classes("geo-usage-bar"):
+                                ui.element("div").classes("geo-usage-bar__fill").style(
+                                    f"width: {pct}%"
+                                )
+                            ui.label(
+                                f"{format_tokens(row.get('total_tokens', 0))} tokens · "
+                                f"{row.get('calls', 0)} chamadas"
+                            ).classes("geo-meta-caption")
+
+            if recent:
+                with ui.expansion(
+                    "Chamadas recentes",
+                    icon="receipt_long",
+                    value=False,
+                ).classes("w-full geo-ai-cost-recent mt-4"):
+                    with ui.element("div").classes("geo-ai-cost-recent-table"):
+                        for call in recent:
+                            est = " ~" if call.get("estimated") else ""
+                            ui.html(
+                                "<div class='geo-ai-cost-recent-row'>"
+                                f"<span class='geo-ai-cost-recent-time'>{call['created_at']}</span>"
+                                f"<span class='geo-ai-cost-recent-main'>"
+                                f"{provider_label(call['provider'])} · {call['task']}"
+                                f" <em>({call['source']})</em></span>"
+                                f"<span class='geo-ai-cost-recent-meta'>"
+                                f"{format_tokens(call['total_tokens'])}{est} · "
+                                f"{format_cost_usd(call['cost_usd'])}</span>"
+                                "</div>"
+                            )
+
+            ui.label(
+                "Custos em USD (estimativa com base em config/ai_pricing.yaml). "
+                "Ollama/LM Studio aparecem como $0."
+            ).classes("geo-meta-caption mt-3")
+
     def render_stats(data: dict, health: dict) -> None:
         stats_container.clear()
         projects_container.clear()
         integrations_container.clear()
+        ai_cost_container.clear()
 
         week_count = data.get("articles_last_7_days", 0)
         total = data.get("total_articles", 0)
@@ -215,6 +314,16 @@ def build_tab_dashboard(config) -> None:
                 "folder_special",
                 trend_muted=True,
             )
+            ai_week = (data.get("ai_usage") or {}).get("last_7_days") or {}
+            _render_stat_card(
+                "Custo IA (7 dias)",
+                data.get("ai_cost_7d_label", "$0.00"),
+                f"{data.get('ai_tokens_7d_label', '0')} tokens · "
+                f"{ai_week.get('calls', 0)} chamada(s)",
+                "payments",
+                "savings",
+                trend_muted=not (data.get("ai_usage") or {}).get("has_data"),
+            )
             _render_new_extraction_cta()
 
         recent = data.get("recent_articles") or []
@@ -236,6 +345,8 @@ def build_tab_dashboard(config) -> None:
                 _render_featured_project(recent[0])
                 for item in recent[1:3]:
                     _render_compact_project(item)
+
+        _render_ai_cost_panel(data.get("ai_usage") or {})
 
         with integrations_container:
             ui.label("Estado de produção").classes("text-subtitle2")
@@ -273,10 +384,19 @@ def build_tab_dashboard(config) -> None:
             )
             css = "geo-status-badge geo-status-badge--ok" if api_ok else "geo-status-badge geo-status-badge--warn"
             ui.html(f'<span class="{css}">{api_label}</span>')
+            cache_line = ""
+            if data.get("url_cache_enabled"):
+                cache_line = (
+                    f" · Cache URLs: {data.get('url_cache_entries', 0)} pág. "
+                    f"(TTL {data.get('url_cache_ttl_hours', 24)}h)"
+                )
+            sim_pct = data.get("similarity_threshold_pct")
+            sim_line = f" · Limiar similaridade: {sim_pct}%" if sim_pct else ""
             ui.label(
                 f"Ambiente: {settings.env} · "
                 f"Base: {data.get('storage_db_label', '0 B')} · "
                 f"Exportações: {data.get('storage_output_label', '0 B')}"
+                f"{cache_line}{sim_line}"
             ).classes("text-caption text-grey-7")
 
             with ui.expansion("Rotas da API REST", icon="api").classes("w-full"):
@@ -288,9 +408,13 @@ def build_tab_dashboard(config) -> None:
             with ui.expansion("Webhook (notificações)", icon="webhook").classes("w-full"):
                 build_webhook_panel()
 
+            with ui.expansion("CMS externo", icon="cloud_upload").classes("w-full"):
+                build_cms_panel()
+
     async def refresh() -> None:
         try:
-            data = await run.io_bound(get_dashboard_stats)
+            owner_id = require_session_user_id()
+            data = await run.io_bound(lambda: get_dashboard_stats(user_id=owner_id))
             health = await run.io_bound(check_api_health)
             render_stats(data, health)
         except RuntimeError:

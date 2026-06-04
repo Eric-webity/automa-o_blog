@@ -1,8 +1,8 @@
 # GEO Extractor — Visão do sistema e plano de organização
 
-**Atualizado:** junho/2026  
+**Atualizado:** 4 jun/2026  
 **Público:** quem desenvolve ou mantém o projeto  
-**Relacionados:** [Manual de uso](MANUAL.md) · [Resumo técnico](RESUMO_TECNICO.md)
+**Relacionados:** [AGENTS.md](../AGENTS.md) · [Manual de uso](MANUAL.md) · [Resumo técnico](RESUMO_TECNICO.md)
 
 Este documento descreve **o que o software faz**, **como o código está organizado hoje**, **o que pode melhorar** e **os próximos passos** para deixar a base mais limpa e fácil de evoluir.
 
@@ -62,7 +62,7 @@ Há login local; as matérias ficam no banco SQLite em `data/`.
 | `ui/` | Telas, estilos, login, abas e componentes visuais |
 | `api/` | Endpoints para integrar com outros sistemas |
 | `services/` | Regras de negócio: chamar IA, buscar URLs, gerar blog, estatísticas |
-| `core/` | Motor GEO: esqueleto, índice IA, extração de insights |
+| `core/` | Motor GEO: esqueleto, índice IA, insights, nichos, FAQ JSON-LD |
 | `db/` | Guardar usuários, perfil do blog e matérias no histórico |
 | `config/` | Provedores de IA (`ai_providers.yaml`) e ajustes de produção |
 | `skills/` | Textos de orientação para a IA (prompts em Markdown) |
@@ -72,18 +72,22 @@ Há login local; as matérias ficam no banco SQLite em `data/`.
 
 ### Abas da interface
 
-| Aba | Para que serve |
-|-----|----------------|
-| Dashboard | Números do uso, saúde da API, webhooks |
-| Criar matéria | Fluxo principal do blog (tema + referências) |
-| URLs | Artigo a partir de links |
-| Texto manual | Artigo a partir de texto colado |
-| JSON ChatGPT | Analisar JSON da aba Network do ChatGPT |
-| Histórico | Matérias já geradas |
-| Perfil | Dados do autor/blog |
-| Settings | Chaves de API e provedores de IA |
+Rotas definidas em `ui/pages/routes.py`.
 
-Na barra lateral: **extração avançada** (NLP), **gerar com IA** e escolha do **provedor** (OpenAI, Anthropic, Ollama, etc.).
+| Aba | Rota | Para que serve |
+|-----|------|----------------|
+| Dashboard | `/dashboard` | Uso de IA (tokens/custo), saúde da API, webhooks, CMS |
+| Criar matéria | `/criar-materia` | Fluxo principal do blog (tema + referências + nicho GEO) |
+| URLs | `/urls` | Artigo a partir de links |
+| Texto manual | `/texto` | Artigo a partir de texto colado |
+| JSON ChatGPT | `/json` | Analisar JSON da aba Network do ChatGPT |
+| Lote CSV | `/lote` | Várias matérias a partir de planilha CSV |
+| Histórico | `/historico` | Matérias já geradas; export FAQ JSON-LD; publicar CMS |
+| Perfil | `/perfil` | Dados do autor/blog |
+| Administração | `/admin` | Só utilizadores admin (gestão de contas) |
+| Settings | `/configuracoes` | Chaves de API, provedores de IA, cache de URLs |
+
+Na barra lateral (blog, URLs, texto): **extração avançada** (NLP), **gerar com IA**, **provedor** (OpenAI, Anthropic, Ollama, etc.) e **nicho GEO** (genérico, saúde, finanças, SaaS).
 
 ---
 
@@ -92,10 +96,14 @@ Na barra lateral: **extração avançada** (NLP), **gerar com IA** e escolha do 
 ### O que já funciona bem
 
 - Geração de matérias longas (1.500 a 6.000 palavras), inclusive modo “artigo longo” em duas etapas com IA.
-- Vários provedores de IA configuráveis.
-- Histórico local, API REST, Docker e webhooks para produção.
-- Interface moderna com autenticação de usuário.
+- Vários provedores de IA configuráveis; painel de tokens/custo no Dashboard.
+- Histórico local por utilizador, API REST, Docker e webhooks para produção.
+- Interface moderna com login, papéis (utilizador/admin) e fila em segundo plano para tarefas longas.
 - Prompts versionados em `skills/`.
+- Nichos GEO (`core/geo_niches.py`) nas abas blog, URLs, texto e lote.
+- Fetch headless para páginas em JavaScript (`GEO_BROWSER_FETCH`, Playwright).
+- Export de FAQ em JSON-LD (`core/faq_jsonld.py`, componente na UI).
+- Validação anti-SSRF de URLs na API e nos pipelines (`services/url_security.py`).
 
 ### Pontos de atenção na organização
 
@@ -116,7 +124,7 @@ Risco: corrigir um bug em `services/` e o Streamlit ou um teste ainda usar cópi
 
 **3. Pasta `pipelines/`**
 
-Só redireciona para `services`. Quem procura o fluxo real deve ir a `services/blog_pipeline.py`.
+Só redireciona para `services/`. Fluxos reais: `services/blog_pipeline.py`, `services/url_pipeline.py`, `services/batch_csv.py`. Ver `pipelines/README.md`.
 
 **4. Autenticação em dois modos**
 
@@ -125,9 +133,9 @@ Só redireciona para `services`. Quem procura o fluxo real deve ir a `services/b
 
 Ainda não há vínculo claro “cada usuário da interface tem sua chave de API”.
 
-**5. Matérias e usuários**
+**5. Matérias e usuários** — **resolvido (D3)**
 
-Convém confirmar se cada matéria no histórico pertence ao usuário logado (importante se mais de uma pessoa usar a mesma instalação).
+Cada matéria tem `user_id`; histórico, dashboard e API filtram por conta. Ver `db/repository.py` e `ui/auth.py`.
 
 ---
 
@@ -165,64 +173,69 @@ A interface e a API **não** devem importar código legado de `modules/` diretam
 
 ## 5. Próximos passos — plano por fases
 
-### Fase A — Organização do código (prioridade alta)
+### Fase A — Organização do código — **concluída (base estável)**
 
-| # | Tarefa | Resultado esperado |
-|---|--------|-------------------|
-| A1 | Mapear imports: tudo que ainda usa `modules.*` | Lista de arquivos a migrar |
-| A2 | Apontar testes e `app.py` para `services` e `core` | Um só lugar com a lógica |
-| A3 | Remover duplicatas em `modules/` ou deixar só reexportações finas | Menos risco de divergência |
-| A4 | Mover `app.py` para `legacy/` ou marcar como descontinuado no README | Documentação alinhada |
-| A5 | Centralizar rótulos da UI (provedores, status) em um arquivo | Menos repetição em `tab_*.py` |
-| A6 | Atualizar README com estrutura alvo e link para este doc | Onboarding mais rápido |
+| # | Tarefa | Estado |
+|---|--------|--------|
+| A1 | Mapear imports `modules.*` | Feito — só `legacy/` (congelado); `ui/`, `api/`, `services/` limpos |
+| A2 | Testes e entrada em `services` / `core` | Feito — `pytest`; `main.py` sem `modules` |
+| A3 | `modules/` só reexportações | Feito — ver `modules/README.md` |
+| A4 | `app.py` descontinuado | Feito — aviso + `legacy/app.py` |
+| A5 | Rótulos UI centralizados | Feito — `ui/constants.py` |
+| A6 | README + guia de estrutura | Feito — README, este doc, **`AGENTS.md`** na raiz |
 
-**Critério de “feito”:** `pytest tests/ -q` verde; `main.py` sem import de `modules`.
+**Critério de “feito”:** `pytest tests/ -q` verde; teste `tests/test_project_structure.py` impede `modules` em código ativo.
+
+**Antes de features novas:** ler [AGENTS.md](../AGENTS.md) (camadas e dependências).
 
 ---
 
 ### Fase B — Qualidade do conteúdo gerado
 
-| # | Tarefa | Resultado esperado |
-|---|--------|-------------------|
-| B1 | Aviso se o texto ficou com menos de 85% das palavras pedidas | Usuário sabe quando revisar |
-| B2 | Checklist na aba “Criar matéria” (H1, FAQ, tamanho) | Revisão humana guiada |
-| B3 | Cache de URLs já buscadas | Menos tempo e custo em novas matérias |
-| B4 | Alerta de texto muito parecido com a fonte | Mais segurança editorial |
-| B5 | (Opcional) Busca com navegador headless para sites em JavaScript | Menos falhas ao ler páginas |
+| # | Tarefa | Estado |
+|---|--------|--------|
+| B1 | Aviso se o texto ficou com menos de 85% das palavras pedidas | Feito — banner + toast + `services/word_count.py` |
+| B2 | Checklist na aba “Criar matéria” (H1, FAQ, tamanho) | Feito — `geo_checklist` + revisão humana; pré-voo em `brief_preflight` |
+| B2b | Checklist em URLs / Texto manual | Feito — `article_review_panel` |
+| B3 | Cache de URLs já buscadas | Feito — `services/url_cache.py`, pré-voo, abas URLs/blog, Definições |
+| B4 | Alerta de texto muito parecido com a fonte | Feito — `similarity_check`, banners em blog/URLs/texto, checklist |
+| B5 | Busca com navegador headless (sites em JavaScript) | Feito — `services/browser_fetcher.py`, `GEO_BROWSER_FETCH` (`auto` / `always` / `never`); ver README e `.env.example` |
 
 ---
 
 ### Fase C — Produto e uso diário
 
-| # | Tarefa | Resultado esperado |
-|---|--------|-------------------|
-| C1 | Modelos por área (saúde, finanças, SaaS) | Blocos GEO prontos por nicho |
-| C2 | Exportar FAQ em JSON-LD | SEO técnico automático |
-| C3 | Lote: planilha CSV → vários `.md` em `output/` | Produção em escala |
-| C4 | Log de tokens/custo no Dashboard | Controle de gastos com IA |
+| # | Tarefa | Estado |
+|---|--------|--------|
+| C1 | Modelos por área (saúde, finanças, SaaS) | Feito (base) — `core/geo_niches.py`, `ui/components/geo_niche_panel.py`; **pendente:** mais verticais e ajuste fino de blocos/prompts por nicho |
+| C2 | Exportar FAQ em JSON-LD | Feito — `core/faq_jsonld.py`, `ui/components/faq_jsonld_export.py` (histórico, URLs, texto) |
+| C3 | Lote: planilha CSV → vários `.md` em `output/` | Feito — aba Lote (`/lote`), fila, histórico opcional, webhook `batch.completed`, coluna `nicho` no CSV |
+| C4 | Log de tokens/custo no Dashboard | Feito — `services/ai_usage.py`, painel no Dashboard |
 
 ---
 
 ### Fase D — Plataforma e segurança
 
-| # | Tarefa | Resultado esperado |
-|---|--------|-------------------|
-| D1 | Validar URLs na API (evitar abuso se exposto na rede) | Menos risco de SSRF |
-| D2 | Fila em segundo plano para textos muito longos | Interface não trava |
-| D3 | `user_id` em cada matéria do histórico | Dados isolados por conta |
-| D4 | Documentar `GEO_STORAGE_SECRET` para produção | Sessões mais seguras |
+| # | Tarefa | Estado |
+|---|--------|--------|
+| D1 | Validar URLs na API (anti-SSRF) | Feito — `api/url_validation.py`, `services/url_security.py`, testes em `tests/test_api_url_validation.py` |
+| D2 | Fila em segundo plano para textos muito longos | Feito — blog, texto, URLs, lote (`GEO_QUEUE_*`, `services/background_jobs.py`) |
+| D3 | `user_id` em cada matéria do histórico | Feito — ver `docs/CONTAS_E_HISTORICO.md` |
+| D4 | Documentar `GEO_STORAGE_SECRET` para produção | Feito — ver `docs/PRODUCAO_SESSOES.md` |
+| D5 | Chave de API por utilizador (multi-tenant) | Pendente — hoje `GEO_API_KEY` é global; login da UI é por conta |
 
 ---
 
 ## 6. Ordem sugerida de trabalho
 
-Para quem for implementar, esta sequência costuma dar menos retrabalho:
-
-1. **Fase A** (organização) — base estável antes de features novas.  
-2. **B1 + B2** (validação e checklist) — ganho rápido para quem usa o blog.  
-3. **D3** (matérias por usuário) — se houver mais de um login na mesma máquina.  
-4. **B3, B4** (cache e similaridade).  
-5. Demais itens conforme necessidade (CMS, lote, fila assíncrona).
+1. **Fase A** — concluída; manter `pytest tests/ -q` e `test_project_structure.py` verdes em cada alteração.
+2. **Fases B, C, D (núcleo)** — concluídas na base atual (checklist, cache, similaridade, lote, nichos, JSON-LD, headless, validação de URLs, fila, `user_id`, sessão em produção).
+3. **Próximo foco sugerido:**
+   - **C1 (expandir):** novos nichos GEO e prompts/blocos específicos por vertical.
+   - **D5:** API com chave por utilizador ou escopo por `user_id` na geração via REST.
+   - **Integrações:** polish de CMS/webhook (Dashboard, histórico, `POST /api/v1/articles/publish`).
+   - **Docs:** alinhar [RESUMO_TECNICO.md](RESUMO_TECNICO.md) com este plano (vários itens lá ainda constam como futuros).
+4. Código novo sempre em `services/` + `ui/` / `api/`; não reabrir lógica em `modules/`.
 
 ---
 
@@ -236,6 +249,8 @@ Para quem for implementar, esta sequência costuma dar menos retrabalho:
 | **Pipeline** | Sequência automática: buscar fontes → extrair ideias → montar esqueleto → gerar texto → salvar. |
 | **Provedor** | Serviço de IA (OpenAI, Anthropic, Ollama, etc.). |
 | **Modo local** | Gera rascunho sem chamar IA (texto genérico; serve para testes ou offline). |
+| **Nicho GEO** | Modelo de esqueleto/blocos por área (ex.: saúde, finanças, SaaS); id em `core/geo_niches.py`. |
+| **JSON-LD FAQ** | Script `FAQPage` para colar no HTML a partir do bloco de perguntas do artigo. |
 
 ---
 
@@ -243,11 +258,17 @@ Para quem for implementar, esta sequência costuma dar menos retrabalho:
 
 | Documento | Conteúdo |
 |-----------|----------|
+| [AGENTS.md](../AGENTS.md) | Regras de camadas para devs e agentes (ler primeiro) |
 | [MANUAL.md](MANUAL.md) | Como usar cada aba e fluxo |
-| [RESUMO_TECNICO.md](RESUMO_TECNICO.md) | Detalhes técnicos, limitações e roadmap antigo |
+| [PRODUCAO_SESSOES.md](PRODUCAO_SESSOES.md) | `GEO_STORAGE_SECRET` em produção |
+| [CONTAS_E_HISTORICO.md](CONTAS_E_HISTORICO.md) | Várias contas na mesma máquina |
+| [RESUMO_TECNICO.md](RESUMO_TECNICO.md) | Detalhes técnicos (revisar alinhamento com este plano) |
 | [EXECUTABLE.md](EXECUTABLE.md) | Gerar executável Windows |
-| **Este arquivo** | Visão geral, organização e próximos passos de estruturação |
+| [services/README.md](../services/README.md) | Pipelines e módulos de negócio |
+| [core/README.md](../core/README.md) | Motor GEO sem efeitos externos |
+| [modules/README.md](../modules/README.md) · [pipelines/README.md](../pipelines/README.md) | Pastas legadas — só reexportações |
+| **Este arquivo** | Visão geral, organização e estado das fases |
 
 ---
 
-*Documento vivo: atualizar quando concluir uma fase do plano (especialmente A e B).*
+*Documento vivo: atualizar quando mudar o estado de uma fase (tabela na secção 5) ou abas/rotas da UI.*

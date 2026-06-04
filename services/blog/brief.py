@@ -28,6 +28,7 @@ class BlogBrief:
     cta: str = ""
     include_faq: bool = True
     angle: str = ""
+    geo_niche: str = "generic"
 
     def is_long_form(self) -> bool:
         return self.word_count >= LONG_FORM_THRESHOLD

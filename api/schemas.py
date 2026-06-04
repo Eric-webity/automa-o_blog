@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from services.url_security import URLValidationError, validate_reference_urls
 
 
 class HealthResponse(BaseModel):
@@ -19,8 +21,26 @@ class GenerateArticleRequest(BaseModel):
     """Pedido de geração de matéria via API."""
 
     topic: str = Field(..., min_length=3, max_length=500)
-    reference_urls: list[str] = Field(default_factory=list)
+    reference_urls: list[str] = Field(
+        default_factory=list,
+        description="URLs públicas HTTP(S) apenas; máx. conforme GEO_MAX_REFERENCE_URLS.",
+    )
     keywords: list[str] = Field(default_factory=list)
+
+    @field_validator("reference_urls")
+    @classmethod
+    def validate_reference_urls_field(cls, value: list[str]) -> list[str]:
+        if not value:
+            return []
+        try:
+            valid, errors = validate_reference_urls(value)
+        except URLValidationError as exc:
+            raise ValueError(str(exc)) from exc
+        if errors:
+            preview = "; ".join(errors[:3])
+            extra = f" (+{len(errors) - 3} mais)" if len(errors) > 3 else ""
+            raise ValueError(f"URLs rejeitadas: {preview}{extra}") from None
+        return valid
     audience: str = "Leitores interessados no tema"
     tone: str = "informativo"
     word_count: int = Field(default=2500, ge=500, le=6000)

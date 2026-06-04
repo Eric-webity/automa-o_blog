@@ -2,33 +2,21 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from nicegui import ui
 
+from services.article_validation import (
+    ValidationItem,
+    primary_checks,
+    secondary_checks,
+    validate_article_markdown,
+)
 from services.blog import BlogBrief, BlogPostPackage
 from services.blog_pipeline import BlogResult
-from services.word_count import WORD_COUNT_WARNING_RATIO
 
-_CERT_IN_H1 = re.compile(
-    r"\b(ISO\s*\d+|OMS|ANVISA|FDA|CE\b|certificad[oa])\b",
-    re.I,
-)
-
-# Itens principais pedidos na revisão editorial
-_PRIMARY_IDS: tuple[str, ...] = ("h1_editorial", "faq", "word_count", "originality")
-
-
-@dataclass
-class ChecklistItem:
-    """Item automático da checklist."""
-
-    item_id: str
-    label: str
-    passed: bool
-    hint: str = ""
-    detail: str = ""
+# Reexport para testes e compatibilidade
+ChecklistItem = ValidationItem
 
 
 @dataclass
@@ -44,114 +32,29 @@ def evaluate_geo_checklist(
     brief: BlogBrief,
     package: BlogPostPackage,
     result: BlogResult,
-) -> list[ChecklistItem]:
+) -> list[ValidationItem]:
     """Calcula verificações automáticas."""
-    md = package.markdown or ""
-    items: list[ChecklistItem] = []
-
-    target = package.word_count_target or brief.word_count
-    actual = package.word_count_actual or 0
-    ratio = (actual / target) if target else 0
-    ratio_ok = bool(target and actual and ratio >= WORD_COUNT_WARNING_RATIO)
-    items.append(
-        ChecklistItem(
-            item_id="word_count",
-            label="Tamanho do texto",
-            passed=ratio_ok,
-            hint="Abaixo de 85% da meta — expanda secções ou regenere com IA.",
-            detail=f"{actual:,} / {target:,} palavras ({int(ratio * 100) if target else 0}% da meta)",
-        )
+    return validate_article_markdown(
+        package.markdown or "",
+        target_words=package.word_count_target or brief.word_count,
+        include_faq=brief.include_faq,
+        meta_description=package.meta_description or "",
+        faq_items=package.faq_items,
+        similarity_warning=result.similarity_warning,
+        fallback_reason=result.fallback_reason,
     )
 
-    has_faq_section = bool(
-        re.search(r"^##\s+.*perguntas?\s+frequentes", md, re.I | re.M)
-        or package.faq_items
-    )
-    if brief.include_faq:
-        faq_count = len(package.faq_items) if package.faq_items else 0
-        items.append(
-            ChecklistItem(
-                item_id="faq",
-                label="Secção FAQ",
-                passed=has_faq_section,
-                hint="Inclua «## Perguntas frequentes» com 5–8 perguntas e respostas.",
-                detail=f"{faq_count} itens no metadado" if faq_count else "Não detetada no Markdown",
-            )
-        )
 
-    h1_match = re.search(r"^#\s+(.+)$", md, re.M)
-    h1_text = h1_match.group(1).strip() if h1_match else ""
-    h1_ok = bool(h1_text) and not _CERT_IN_H1.search(h1_text)
-    items.append(
-        ChecklistItem(
-            item_id="h1_editorial",
-            label="H1 editorial",
-            passed=h1_ok,
-            hint="Título sem siglas (ISO, OMS…) — use blocos de confiança em H3.",
-            detail=h1_text[:80] + ("…" if len(h1_text) > 80 else "") if h1_text else "H1 em falta",
-        )
-    )
-
-    desc = package.meta_description or ""
-    items.append(
-        ChecklistItem(
-            item_id="meta_description",
-            label="Meta description (50–160 caracteres)",
-            passed=50 <= len(desc) <= 160,
-            detail=f"{len(desc)} caracteres",
-        )
-    )
-
-    items.append(
-        ChecklistItem(
-            item_id="h2_structure",
-            label="Secções H2",
-            passed=bool(re.search(r"^##\s+", md, re.M)),
-            detail="Estrutura citável por IAs",
-        )
-    )
-
-    sim_detail = ""
-    if result.similarity_ratio is not None:
-        sim_detail = f"~{int(result.similarity_ratio * 100)}% de similaridade com fonte"
-    items.append(
-        ChecklistItem(
-            item_id="originality",
-            label="Originalidade vs. fontes",
-            passed=not result.similarity_warning,
-            hint=result.similarity_warning or "Nenhuma proximidade excessiva detectada.",
-            detail=sim_detail or "Sem URLs de referência ou texto distinto das fontes",
-        )
-    )
-
-    if result.fallback_reason:
-        items.append(
-            ChecklistItem(
-                item_id="llm_mode",
-                label="Geração com IA",
-                passed=False,
-                hint=result.fallback_reason,
-            )
-        )
-
-    return items
+def _primary_items(
+    items: list[ValidationItem], brief: BlogBrief
+) -> list[ValidationItem]:
+    return primary_checks(items, include_faq=brief.include_faq)
 
 
-def _primary_items(items: list[ChecklistItem], brief: BlogBrief) -> list[ChecklistItem]:
-    out: list[ChecklistItem] = []
-    for item_id in _PRIMARY_IDS:
-        if item_id == "faq" and not brief.include_faq:
-            continue
-        for item in items:
-            if item.item_id == item_id:
-                out.append(item)
-                break
-    return out
-
-
-def _secondary_items(items: list[ChecklistItem], brief: BlogBrief) -> list[ChecklistItem]:
-    primary_ids = set(_PRIMARY_IDS)
-    return [i for i in items if i.item_id not in primary_ids]
+def _secondary_items(
+    items: list[ValidationItem], brief: BlogBrief
+) -> list[ValidationItem]:
+    return secondary_checks(items, include_faq=brief.include_faq)
 
 
 def _manual_steps(brief: BlogBrief, result: BlogResult) -> list[ManualCheckItem]:
@@ -211,10 +114,14 @@ def _manual_steps(brief: BlogBrief, result: BlogResult) -> list[ManualCheckItem]
     return steps
 
 
-def _render_auto_row(item: ChecklistItem) -> None:
+def _render_auto_row(item: ValidationItem) -> None:
     icon = "check_circle" if item.passed else "error_outline"
     color = "positive" if item.passed else "warning"
-    row_cls = "geo-checklist__row geo-checklist__row--ok" if item.passed else "geo-checklist__row geo-checklist__row--pending"
+    row_cls = (
+        "geo-checklist__row geo-checklist__row--ok"
+        if item.passed
+        else "geo-checklist__row geo-checklist__row--pending"
+    )
     with ui.element("div").classes(row_cls):
         with ui.row().classes("items-start gap-3 w-full"):
             ui.icon(icon, color=color).classes("geo-checklist__icon")
@@ -248,19 +155,26 @@ def render_geo_checklist(
     with ui.expansion(
         "Revisão antes de publicar",
         icon="fact_check",
-    ).classes("geo-checklist-panel w-full mt-4").props("default-opened"):
+    ).classes(
+        "geo-checklist-panel w-full mt-4"
+    ).props("default-opened"):
         ui.label(
             "Use esta lista após cada geração. Os três pontos críticos (H1, FAQ e tamanho) "
             "são verificados automaticamente; confirme o resto manualmente antes de publicar."
         ).classes("geo-checklist__intro")
 
-        # —— Essencial: H1, FAQ, tamanho ——
         with ui.element("div").classes("geo-checklist__section"):
             with ui.row().classes("items-center justify-between w-full mb-2"):
-                ui.label("Essencial (automático)").classes("geo-checklist__section-title")
+                ui.label("Essencial (automático)").classes(
+                    "geo-checklist__section-title"
+                )
                 ui.label(f"{primary_ok}/{len(primary)} OK").classes(
                     "geo-checklist__badge"
-                    + (" geo-checklist__badge--ok" if primary_ok == len(primary) else "")
+                    + (
+                        " geo-checklist__badge--ok"
+                        if primary_ok == len(primary)
+                        else ""
+                    )
                 )
 
             for item in primary:
@@ -272,7 +186,6 @@ def render_geo_checklist(
                 "antes de publicar."
             ).classes("geo-checklist__callout")
 
-        # —— SEO / qualidade extra ——
         if secondary:
             ui.separator().classes("my-3")
             sec_ok = sum(1 for i in secondary if i.passed)
@@ -283,11 +196,12 @@ def render_geo_checklist(
                 for item in secondary:
                     _render_auto_row(item)
 
-        # —— Revisão humana ——
         ui.separator().classes("my-4")
         with ui.element("div").classes("geo-checklist__section"):
             with ui.row().classes("items-center justify-between w-full mb-2"):
-                ui.label("Revisão humana guiada").classes("geo-checklist__section-title")
+                ui.label("Revisão humana guiada").classes(
+                    "geo-checklist__section-title"
+                )
                 progress_label = ui.label(
                     f"{manual_ok}/{len(manual_steps)} confirmados"
                 ).classes("geo-checklist__badge")
@@ -295,9 +209,7 @@ def render_geo_checklist(
             ui.linear_progress(
                 value=manual_ok / len(manual_steps) if manual_steps else 0,
                 show_value=False,
-            ).props(
-                'color="primary" rounded size="8px"'
-            ).classes("w-full mb-3")
+            ).props('color="primary" rounded size="8px"').classes("w-full mb-3")
 
             def _sync_progress() -> None:
                 done = sum(1 for s in manual_steps if manual_done.get(s.item_id))
@@ -313,7 +225,9 @@ def render_geo_checklist(
                         manual_done[sid] = bool(e.value)
                         _sync_progress()
 
-                    cb = ui.checkbox(step.label, value=manual_done.get(step.item_id, False))
+                    cb = ui.checkbox(
+                        step.label, value=manual_done.get(step.item_id, False)
+                    )
                     cb.classes("geo-checklist__manual-cb")
                     cb.on("update:model-value", _on_manual)
                     ui.label(step.guide).classes("geo-checklist__guide")
@@ -321,6 +235,6 @@ def render_geo_checklist(
             _sync_progress()
 
             if state.get("complete"):
-                ui.label("Revisão concluída — pode guardar no blog ou exportar.").classes(
-                    "geo-checklist__success"
-                )
+                ui.label(
+                    "Revisão concluída — pode guardar no blog ou exportar."
+                ).classes("geo-checklist__success")

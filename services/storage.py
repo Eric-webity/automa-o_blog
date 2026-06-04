@@ -20,19 +20,36 @@ def save_blog_artifacts(
     markdown: str,
     meta: dict,
     ai_index: dict | None = None,
-) -> tuple[str, str, str | None]:
+) -> tuple[str, str, str | None, str | None]:
+    from core.faq_jsonld import build_faq_jsonld, collect_faq_items, serialize_faq_jsonld
+
     ensure_output_dir()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     md_path = OUTPUT_DIR / f"blog_{slug}_{ts}.md"
     meta_path = OUTPUT_DIR / f"blog_{slug}_{ts}_meta.json"
     md_path.write_text(markdown, encoding="utf-8")
+
+    faq_path: str | None = None
+    faq_items = collect_faq_items(meta.get("faq"), markdown)
+    if faq_items:
+        page_url = f"https://example.com/{slug}" if slug else None
+        jsonld = build_faq_jsonld(
+            faq_items,
+            page_url=page_url,
+            page_name=meta.get("meta_title"),
+        )
+        meta["faq_jsonld"] = jsonld
+        faq_file = OUTPUT_DIR / f"blog_{slug}_{ts}_faq.jsonld.json"
+        faq_file.write_text(serialize_faq_jsonld(jsonld), encoding="utf-8")
+        faq_path = str(faq_file)
+
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     index_path: str | None = None
     if ai_index:
         ip = OUTPUT_DIR / f"blog_{slug}_{ts}_indice.json"
         ip.write_text(json.dumps(ai_index, indent=2, ensure_ascii=False), encoding="utf-8")
         index_path = str(ip)
-    return str(md_path), str(meta_path), index_path
+    return str(md_path), str(meta_path), index_path, faq_path
 
 
 def save_url_artifacts(

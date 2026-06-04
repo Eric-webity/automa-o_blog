@@ -88,6 +88,7 @@ def generate_long_form_chunked(
         system=system,
         max_tokens=tokens_half,
         provider=provider,
+        source="blog",
     )
 
     prompt2 = (
@@ -109,6 +110,7 @@ def generate_long_form_chunked(
         system=system,
         max_tokens=tokens_half,
         provider=provider,
+        source="blog",
     )
     combined = part1.rstrip() + "\n\n" + part2.lstrip()
     return combined, prov2 or prov
@@ -143,6 +145,7 @@ def generate_standard(
         system=system,
         max_tokens=max_tokens_for_brief(brief),
         provider=provider,
+        source="blog",
     )
     return raw, prov
 

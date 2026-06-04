@@ -22,6 +22,7 @@ class AppConfig:
     ready_providers: list[str] = field(default_factory=list)
     open_history_article: Callable[[int], None] | None = field(default=None, repr=False)
     handle_logout: Callable[[], None] | None = field(default=None, repr=False)
+    session_user_id: int | None = None
 
     def go_history_tab(self) -> None:
         """Navega para a página de Histórico."""

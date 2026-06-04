@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import requests
 import yaml
 
+from services.ai_usage import UsageTokens, record_ai_usage
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config" / "ai_providers.yaml"
+
+
+@dataclass
+class _ChatResult:
+    text: str
+    usage: UsageTokens
 
 
 class AIManager:
@@ -63,6 +72,7 @@ class AIManager:
                 prompt="Responda apenas: OK",
                 system="Resposta de uma palavra.",
                 max_tokens=10,
+                source="test",
             )
             return True, f"{used}: {text.strip()[:40]}"
         except Exception as exc:
@@ -165,6 +175,7 @@ class AIManager:
         system: str | None = None,
         max_tokens: int = 3500,
         provider: str | None = None,
+        source: str = "general",
     ) -> tuple[str, str]:
         """
         Chama um provider. Retorna (texto, nome_do_provider_usado).
@@ -188,8 +199,17 @@ class AIManager:
             if not model:
                 continue
             try:
-                text = self._dispatch(name, cfg, model, prompt, system, max_tokens)
-                return text, name
+                result = self._dispatch(name, cfg, model, prompt, system, max_tokens)
+                record_ai_usage(
+                    provider=name,
+                    model=model,
+                    task=task,
+                    usage=result.usage,
+                    prompt_text=prompt,
+                    completion_text=result.text,
+                    source=source,
+                )
+                return result.text, name
             except Exception as e:
                 errors.append(self._describe_error(name, cfg, e))
                 continue
@@ -240,7 +260,7 @@ class AIManager:
         prompt: str,
         system: str | None,
         max_tokens: int,
-    ) -> str:
+    ) -> _ChatResult:
         if name == "openai":
             return self._openai_chat(cfg, model, prompt, system, max_tokens)
         if name == "anthropic":
@@ -270,7 +290,17 @@ class AIManager:
         msgs.append({"role": "user", "content": prompt})
         return msgs
 
-    def _openai_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+    @staticmethod
+    def _usage_from_openai(usage_obj: Any) -> UsageTokens:
+        if not usage_obj:
+            return UsageTokens(0, 0, estimated=True)
+        return UsageTokens(
+            prompt_tokens=int(getattr(usage_obj, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage_obj, "completion_tokens", 0) or 0),
+            estimated=False,
+        )
+
+    def _openai_chat(self, cfg, model, prompt, system, max_tokens) -> _ChatResult:
         from openai import OpenAI
 
         client = OpenAI(api_key=self._api_key(cfg), base_url=cfg.get("base_url"))
@@ -280,9 +310,10 @@ class AIManager:
             max_tokens=max_tokens,
             temperature=0.6,
         )
-        return r.choices[0].message.content or ""
+        text = r.choices[0].message.content or ""
+        return _ChatResult(text=text, usage=self._usage_from_openai(r.usage))
 
-    def _anthropic_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+    def _anthropic_chat(self, cfg, model, prompt, system, max_tokens) -> _ChatResult:
         from anthropic import Anthropic
 
         client = Anthropic(api_key=self._api_key(cfg))
@@ -294,9 +325,17 @@ class AIManager:
         if system:
             kwargs["system"] = system
         r = client.messages.create(**kwargs)
-        return r.content[0].text
+        text = r.content[0].text
+        usage = UsageTokens(0, 0, estimated=True)
+        if getattr(r, "usage", None):
+            usage = UsageTokens(
+                prompt_tokens=int(getattr(r.usage, "input_tokens", 0) or 0),
+                completion_tokens=int(getattr(r.usage, "output_tokens", 0) or 0),
+                estimated=False,
+            )
+        return _ChatResult(text=text, usage=usage)
 
-    def _openai_compatible(self, cfg, model, prompt, system, max_tokens) -> str:
+    def _openai_compatible(self, cfg, model, prompt, system, max_tokens) -> _ChatResult:
         headers = {
             "Authorization": f"Bearer {self._api_key(cfg)}",
             "Content-Type": "application/json",
@@ -315,9 +354,17 @@ class AIManager:
             timeout=180,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"] or ""
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"] or ""
+        usage_raw = data.get("usage") or {}
+        usage = UsageTokens(
+            prompt_tokens=int(usage_raw.get("prompt_tokens") or 0),
+            completion_tokens=int(usage_raw.get("completion_tokens") or 0),
+            estimated=not usage_raw,
+        )
+        return _ChatResult(text=text, usage=usage)
 
-    def _ollama_chat(self, cfg, model, prompt, system, max_tokens) -> str:
+    def _ollama_chat(self, cfg, model, prompt, system, max_tokens) -> _ChatResult:
         base = cfg.get("base_url", "http://localhost:11434").rstrip("/")
         resp = requests.post(
             f"{base}/api/chat",
@@ -330,4 +377,13 @@ class AIManager:
             timeout=180,
         )
         resp.raise_for_status()
-        return resp.json().get("message", {}).get("content", "")
+        data = resp.json()
+        text = data.get("message", {}).get("content", "")
+        prompt_eval = int(data.get("prompt_eval_count") or 0)
+        eval_count = int(data.get("eval_count") or 0)
+        usage = UsageTokens(
+            prompt_tokens=prompt_eval,
+            completion_tokens=eval_count,
+            estimated=not (prompt_eval or eval_count),
+        )
+        return _ChatResult(text=text, usage=usage)

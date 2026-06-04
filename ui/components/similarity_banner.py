@@ -2,21 +2,81 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 from nicegui import ui
 
 from services.blog_pipeline import BlogResult
+from services.similarity_check import SimilarityReport, similarity_threshold
 
 
-def render_similarity_banner(result: BlogResult) -> bool:
+@dataclass(frozen=True)
+class SimilarityAlert:
+    """Dados para exibir alerta de originalidade na UI."""
+
+    warning: str
+    severity: str = "high"
+    ratio: float | None = None
+    excerpt: str | None = None
+    threshold: float | None = None
+
+    @classmethod
+    def from_report(cls, report: SimilarityReport | None) -> SimilarityAlert | None:
+        if not report:
+            return None
+        return cls(
+            warning=report.message,
+            severity=report.severity,
+            ratio=report.ratio,
+            excerpt=report.paragraph_excerpt,
+            threshold=similarity_threshold(),
+        )
+
+    @classmethod
+    def from_blog_result(cls, result: BlogResult) -> SimilarityAlert | None:
+        if not result.similarity_warning:
+            return None
+        return cls(
+            warning=result.similarity_warning,
+            severity=result.similarity_severity or "high",
+            ratio=result.similarity_ratio,
+            excerpt=result.similarity_excerpt,
+            threshold=result.similarity_threshold,
+        )
+
+    @classmethod
+    def from_url_result(cls, result: Any) -> SimilarityAlert | None:
+        if not getattr(result, "similarity_warning", None):
+            return None
+        return cls(
+            warning=result.similarity_warning,
+            severity=getattr(result, "similarity_severity", None) or "high",
+            ratio=getattr(result, "similarity_ratio", None),
+            excerpt=getattr(result, "similarity_excerpt", None),
+            threshold=getattr(result, "similarity_threshold", None),
+        )
+
+
+def render_similarity_banner(alert: SimilarityAlert | BlogResult | None) -> bool:
     """
     Banner destacado de segurança editorial (originalidade vs. fontes).
 
+    Aceita ``SimilarityAlert``, ``BlogResult`` ou ``UrlPipelineResult``.
     Devolve True se o aviso foi exibido.
     """
-    if not result.similarity_warning:
+    if alert is None:
+        return False
+    if isinstance(alert, BlogResult):
+        info = SimilarityAlert.from_blog_result(alert)
+    elif isinstance(alert, SimilarityAlert):
+        info = alert
+    else:
+        info = SimilarityAlert.from_url_result(alert)
+    if not info:
         return False
 
-    is_high = (result.similarity_severity or "high") == "high"
+    is_high = info.severity == "high"
     title = (
         "Texto muito parecido com a fonte — reescreva antes de publicar"
         if is_high
@@ -34,14 +94,15 @@ def render_similarity_banner(result: BlogResult) -> bool:
             ui.icon(icon, color="negative" if is_high else "orange").classes("mt-0.5")
             with ui.column().classes("gap-1 flex-grow min-w-0"):
                 ui.label(title).classes("geo-similarity-banner__title")
-                ui.label(result.similarity_warning).classes("geo-similarity-banner__text")
-                if result.similarity_ratio is not None:
+                ui.label(info.warning).classes("geo-similarity-banner__text")
+                if info.ratio is not None:
+                    limit_pct = int((info.threshold or similarity_threshold()) * 100)
                     ui.label(
-                        f"Similaridade detetada: ~{int(result.similarity_ratio * 100)}% "
-                        f"(limite editorial: {int((result.similarity_threshold or 0.85) * 100)}%)"
+                        f"Similaridade detetada: ~{int(info.ratio * 100)}% "
+                        f"(limite editorial: {limit_pct}%)"
                     ).classes("geo-meta-caption")
-                if result.similarity_excerpt:
-                    ui.label(f'Trecho: "{result.similarity_excerpt}"').classes(
+                if info.excerpt:
+                    ui.label(f'Trecho: "{info.excerpt}"').classes(
                         "geo-similarity-banner__excerpt"
                     )
                 ui.label(
@@ -50,13 +111,16 @@ def render_similarity_banner(result: BlogResult) -> bool:
     return True
 
 
-def notify_similarity_if_needed(result: BlogResult) -> None:
+def notify_similarity_if_needed(alert: SimilarityAlert | BlogResult | None) -> None:
     """Toast quando a similaridade com fontes excede o limiar."""
-    if not result.similarity_warning:
+    if isinstance(alert, BlogResult):
+        info = SimilarityAlert.from_blog_result(alert)
+    elif isinstance(alert, SimilarityAlert):
+        info = alert
+    elif alert is not None:
+        info = SimilarityAlert.from_url_result(alert)
+    else:
+        info = None
+    if not info:
         return
-    ui.notify(
-        result.similarity_warning,
-        type="warning",
-        multi_line=True,
-        timeout=10000,
-    )
+    ui.notify(info.warning, type="warning", multi_line=True, timeout=10000)

@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import ipaddress
 import logging
-import re
-import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
-
-import requests
 
 from services.browser_fetcher import (
     browser_fetch_enabled,
@@ -21,6 +16,12 @@ from services.browser_fetcher import (
 )
 from services.html_extract import parse_html
 from services.url_cache import cache_ttl_hours, get_cached, is_cache_enabled, set_cached
+from services.url_security import (
+    URLValidationError,
+    safe_http_get,
+    validate_reference_urls,
+    validate_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +29,17 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 TIMEOUT = 15
 MAX_WORKERS = 5
 
-_BLOCKED_HOST_RE = re.compile(
-    r"^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::1|169\.254\.\d+\.\d+|"
-    r"10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$",
-    re.I,
-)
-
-
-class URLValidationError(ValueError):
-    """URL rejeitada por política de segurança."""
+# Reexportado para compatibilidade com imports existentes.
+__all__ = [
+    "FetchedArticle",
+    "URLValidationError",
+    "UrlFetchStats",
+    "fetch_article",
+    "fetch_many",
+    "fetch_many_with_stats",
+    "validate_url",
+    "validate_reference_urls",
+]
 
 
 @dataclass
@@ -93,40 +96,6 @@ def _domain(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 
 
-def _normalize_url(raw: str) -> str:
-    u = raw.strip()
-    if not u.startswith(("http://", "https://")):
-        u = "https://" + u
-    return u
-
-
-def _is_private_ip(host: str) -> bool:
-    try:
-        for info in socket.getaddrinfo(host, None):
-            ip = ipaddress.ip_address(info[4][0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                return True
-    except (socket.gaierror, ValueError, OSError):
-        pass
-    return False
-
-
-def validate_url(url: str) -> str:
-    """Valida URL e retorna versão normalizada. Levanta URLValidationError se bloqueada."""
-    normalized = _normalize_url(url)
-    parsed = urlparse(normalized)
-    if parsed.scheme not in ("http", "https"):
-        raise URLValidationError(f"Esquema não permitido: {parsed.scheme}")
-    host = (parsed.hostname or "").lower()
-    if not host:
-        raise URLValidationError("URL sem hostname")
-    if _BLOCKED_HOST_RE.match(host):
-        raise URLValidationError(f"URL bloqueada (SSRF): {host}")
-    if _is_private_ip(host):
-        raise URLValidationError(f"URL bloqueada (IP privado): {host}")
-    return normalized
-
-
 def _parsed_to_article(parsed, *, url: str, domain: str, fetch_method: str) -> FetchedArticle:
     return FetchedArticle(
         url=url,
@@ -178,7 +147,11 @@ def _fetch_article_browser(url: str, domain: str) -> FetchedArticle:
 
 def _fetch_article_http(url: str, domain: str) -> FetchedArticle:
     try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT)
+        resp = safe_http_get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=TIMEOUT,
+        )
         resp.raise_for_status()
         parsed = parse_html(resp.text, fallback_title=domain)
         return _parsed_to_article(parsed, url=url, domain=domain, fetch_method="http")
@@ -223,12 +196,13 @@ def _fetch_article_live(url: str, domain: str) -> FetchedArticle:
 
 
 def fetch_article(url: str) -> FetchedArticle:
+    raw = (url or "").strip()
     try:
-        url = validate_url(url)
+        url = validate_url(raw)
     except URLValidationError as e:
         return FetchedArticle(
-            url=url,
-            domain=_domain(url) if "://" in url else "",
+            url=raw,
+            domain=_domain(raw) if "://" in raw else "",
             title="",
             text="",
             headings=[],
@@ -262,21 +236,9 @@ def fetch_article(url: str) -> FetchedArticle:
 
 
 def _normalize_url_list(urls: list[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for raw in urls:
-        u = raw.strip()
-        if not u:
-            continue
-        try:
-            normalized = validate_url(u)
-        except URLValidationError:
-            normalized = _normalize_url(u)
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        unique.append(normalized)
-    return unique
+    """Normaliza URLs válidas; inválidas são ignoradas (erro por URL no fetch)."""
+    valid, _errors = validate_reference_urls(urls)
+    return valid
 
 
 def fetch_many_with_stats(

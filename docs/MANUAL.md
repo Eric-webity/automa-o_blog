@@ -31,6 +31,8 @@ python main.py
 
 Abra a URL exibida no terminal (ex.: `http://localhost:8080`).
 
+**Produção (servidor exposto):** defina `GEO_ENV=production` e um `GEO_STORAGE_SECRET` forte (≥32 caracteres). Sem isto, cookies de login podem ser forjados. Guia completo: [PRODUCAO_SESSOES.md](PRODUCAO_SESSOES.md).
+
 **NLP avançado (opcional):** `python -m spacy download pt_core_news_sm`
 
 ---

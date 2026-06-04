@@ -10,10 +10,14 @@ from datetime import datetime
 from nicegui import run, ui
 
 from db.models import ArticleStatus
-from db.repository import ArticleRecord, ArticleRepository
+from db.repository import ArticleRecord
 from services.analytics import get_dashboard_stats
 from services.blog_publisher import save_post_to_blog
+from ui.auth import article_repository, require_session_user_id
+from ui.session_scope import account_scope_caption, sync_config_session
 from ui.components.article_split_view import ArticleSplitView
+from ui.components.cms_publish_button import mount_cms_publish_button
+from ui.components.faq_jsonld_export import render_faq_jsonld_export
 from ui.constants import history_status_pill_html
 from ui.pages.routes import ROUTE_URLS
 from ui.widgets import page_header
@@ -41,8 +45,9 @@ def _format_saved_time(minutes: int) -> str:
 def build_tab_history(config) -> None:
     """Lista matérias salvas com reabrir, atualizar e excluir."""
     stats_container = ui.element("div").classes("geo-history-stats-grid w-full")
+    workspace = ui.element("div").classes("geo-history-workspace w-full")
     main_container = ui.element("div").classes("geo-history-main w-full")
-    detail_container = ui.column().classes("w-full")
+    detail_container = ui.column().classes("geo-history-detail-slot w-full")
     active_id: dict[str, int | None] = {"id": None}
     last_records: list[ArticleRecord] = []
 
@@ -60,14 +65,17 @@ def build_tab_history(config) -> None:
     with ui.element("div").classes("geo-history-page w-full"):
         page_header(
             "Histórico do blog",
-            "Reabra, atualize ou exporte as matérias guardadas no blog local.",
+            account_scope_caption(),
             eyebrow="Biblioteca",
             actions=_history_actions,
         )
         search_input = search_ref["el"]
 
         stats_container
-        main_container
+
+        with workspace:
+            main_container
+            detail_container
 
         with ui.element("div").classes("geo-history-tips-grid w-full"):
             with ui.element("div").classes("geo-history-tip-card"):
@@ -93,11 +101,10 @@ def build_tab_history(config) -> None:
                         "prontas para publicação no blog local.</p>"
                     )
 
-        detail_container
-
     def clear_detail() -> None:
         detail_container.clear()
         active_id["id"] = None
+        workspace.classes(remove="geo-history-workspace--with-detail")
 
     def render_stats(data: dict) -> None:
         total = data.get("total_articles", 0)
@@ -134,6 +141,7 @@ def build_tab_history(config) -> None:
 
     def show_article(record: ArticleRecord) -> None:
         active_id["id"] = record.id
+        workspace.classes(add="geo-history-workspace--with-detail")
         detail_container.clear()
         with detail_container:
             with ui.element("div").classes("geo-history-detail w-full"):
@@ -147,6 +155,7 @@ def build_tab_history(config) -> None:
 
                 with ui.tabs().classes("w-full geo-inner-tabs") as detail_tabs:
                     t_art = ui.tab("Artigo")
+                    t_faq_ld = ui.tab("FAQ JSON-LD")
                     t_idx = ui.tab("Índice IA")
 
                 with ui.tab_panels(detail_tabs, value=t_art).classes("w-full"):
@@ -165,6 +174,7 @@ def build_tab_history(config) -> None:
                                     json_index=record.json_index,
                                     article_id=record.id,
                                     status=record.status,
+                                    user_id=require_session_user_id(),
                                 )
                                 ui.notify(
                                     f"Matéria #{result.article_id} atualizada no blog.",
@@ -183,6 +193,7 @@ def build_tab_history(config) -> None:
                                     json_index=record.json_index,
                                     article_id=record.id,
                                     status=ArticleStatus.COMPLETED.value,
+                                    user_id=require_session_user_id(),
                                 )
                                 ui.notify("Matéria marcada como concluída.", type="positive")
                                 await refresh_list()
@@ -190,13 +201,36 @@ def build_tab_history(config) -> None:
                                 logger.exception("Falha ao concluir matéria: %s", exc)
                                 ui.notify(f"Erro: {exc}", type="negative")
 
-                        with ui.row().classes("gap-2 mt-3"):
+                        def _record_meta() -> dict:
+                            idx = record.json_index or {}
+                            return {
+                                "meta_title": idx.get("meta_title") or record.title,
+                                "meta_description": idx.get("meta_description", ""),
+                                "slug": idx.get("slug", ""),
+                                "keywords": idx.get("keywords") or [],
+                            }
+
+                        with ui.row().classes("gap-2 mt-3 flex-wrap"):
                             ui.button("Atualizar no blog", on_click=update_in_blog).props(
                                 "color=primary icon=save"
                             )
                             ui.button("Marcar como concluída", on_click=mark_completed).props(
                                 "outline"
                             )
+                            mount_cms_publish_button(
+                                get_title=lambda: record.title,
+                                get_markdown=lambda: split_view.content,
+                                get_meta=_record_meta,
+                            )
+
+                    with ui.tab_panel(t_faq_ld):
+                        idx = record.json_index or {}
+                        render_faq_jsonld_export(
+                            faq_items=idx.get("faq"),
+                            markdown=record.markdown_content,
+                            page_title=record.title,
+                            slug=idx.get("slug", ""),
+                        )
 
                     with ui.tab_panel(t_idx):
                         if record.json_index:
@@ -223,8 +257,9 @@ def build_tab_history(config) -> None:
                         ui.icon("inventory_2", size="xl")
                     ui.label("Nada por aqui ainda").classes("geo-history-empty__title")
                     ui.label(
-                        "Seu histórico de materiais salvos está vazio. Comece a extrair "
-                        "conteúdo para gerenciar suas postagens aqui."
+                        "Não há matérias guardadas nesta conta. Outro utilizador na "
+                        "mesma instalação tem o histórico separado — faça login com a "
+                        "conta correta ou comece a gerar conteúdo."
                     ).classes("geo-history-empty__desc")
                     with ui.element("div").classes("geo-history-empty__actions"):
                         ui.button(
@@ -283,8 +318,13 @@ def build_tab_history(config) -> None:
 
     async def refresh_list() -> None:
         try:
-            data = await run.io_bound(get_dashboard_stats)
-            records = await run.io_bound(ArticleRepository().list_all)
+            sync_config_session(config)
+            owner_id = require_session_user_id()
+
+            def _load():
+                return get_dashboard_stats(user_id=owner_id), article_repository().list_all()
+
+            data, records = await run.io_bound(_load)
         except RuntimeError:
             return
         except Exception as exc:
@@ -315,7 +355,7 @@ def build_tab_history(config) -> None:
 
     async def delete_article(record: ArticleRecord) -> None:
         try:
-            deleted = await run.io_bound(ArticleRepository().delete, record.id)
+            deleted = await run.io_bound(article_repository().delete, record.id)
         except Exception as exc:
             logger.exception("Erro ao excluir artigo id=%s: %s", record.id, exc)
             ui.notify(f"Erro ao excluir: {exc}", type="negative")
@@ -329,7 +369,7 @@ def build_tab_history(config) -> None:
             ui.notify("Matéria não encontrada.", type="warning")
 
     def open_article_by_id(article_id: int) -> None:
-        record = ArticleRepository().get_by_id(article_id)
+        record = article_repository().get_by_id(article_id)
         if record:
             show_article(record)
             asyncio.create_task(refresh_list())

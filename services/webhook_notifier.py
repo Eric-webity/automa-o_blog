@@ -44,3 +44,39 @@ async def notify_article_generated(payload: dict[str, Any]) -> bool:
     except httpx.HTTPError as exc:
         logger.exception("Falha ao enviar webhook: %s", exc)
         return False
+
+
+async def notify_batch_completed(
+    *,
+    output_dir: str,
+    total: int,
+    succeeded: int,
+    failed: int,
+) -> bool:
+    """Webhook após lote CSV concluído (evento ``batch.completed``)."""
+    settings = load_production_settings()
+    if not settings.webhook_url:
+        return False
+
+    headers = {"Content-Type": "application/json"}
+    if settings.webhook_secret:
+        headers["X-GEO-Secret"] = settings.webhook_secret
+
+    body = {
+        "event": "batch.completed",
+        "data": {
+            "output_dir": output_dir,
+            "total": total,
+            "succeeded": succeeded,
+            "failed": failed,
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(settings.webhook_url, json=body, headers=headers)
+            response.raise_for_status()
+        logger.info("Webhook de lote enviado para %s", settings.webhook_url)
+        return True
+    except httpx.HTTPError as exc:
+        logger.exception("Falha ao enviar webhook de lote: %s", exc)
+        return False

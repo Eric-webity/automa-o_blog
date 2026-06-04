@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from nicegui import app as nicegui_app
 
 from api.auth import verify_api_key
+from api.url_validation import validated_reference_urls
 from api.schemas import (
     ArticleDetail,
     ArticleSummary,
@@ -21,6 +22,7 @@ from api.schemas import (
     StatsResponse,
 )
 from db.repository import ArticleRepository
+from db.user_scope import resolve_api_owner_user_id
 from services.ai_manager import AIManager
 from services.analytics import get_dashboard_stats
 from services.blog import BlogBrief
@@ -37,6 +39,11 @@ v1_router = APIRouter(prefix="/v1", tags=["api-v1"], dependencies=[Depends(verif
 
 def _word_count(text: str) -> int:
     return len((text or "").split())
+
+
+def _api_article_repo() -> ArticleRepository:
+    owner_id = resolve_api_owner_user_id()
+    return ArticleRepository(user_id=owner_id) if owner_id is not None else ArticleRepository()
 
 
 def _record_to_summary(record) -> ArticleSummary:
@@ -62,7 +69,7 @@ def health() -> HealthResponse:
 
 @v1_router.get("/stats", response_model=StatsResponse)
 def stats() -> StatsResponse:
-    data = get_dashboard_stats()
+    data = get_dashboard_stats(user_id=resolve_api_owner_user_id())
     return StatsResponse(
         total_articles=data["total_articles"],
         articles_last_7_days=data["articles_last_7_days"],
@@ -79,13 +86,13 @@ def stats() -> StatsResponse:
 
 @v1_router.get("/articles", response_model=list[ArticleSummary])
 def list_articles(limit: int = 50) -> list[ArticleSummary]:
-    records = ArticleRepository().list_all(limit=min(limit, 200))
+    records = _api_article_repo().list_all(limit=min(limit, 200))
     return [_record_to_summary(r) for r in records]
 
 
 @v1_router.get("/articles/{article_id}", response_model=ArticleDetail)
 def get_article(article_id: int) -> ArticleDetail:
-    record = ArticleRepository().get_by_id(article_id)
+    record = _api_article_repo().get_by_id(article_id)
     if not record:
         raise HTTPException(status_code=404, detail="Matéria não encontrada.")
     summary = _record_to_summary(record)
@@ -98,15 +105,16 @@ def get_article(article_id: int) -> ArticleDetail:
 
 @v1_router.delete("/articles/{article_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_article(article_id: int) -> None:
-    if not ArticleRepository().delete(article_id):
+    if not _api_article_repo().delete(article_id):
         raise HTTPException(status_code=404, detail="Matéria não encontrada.")
 
 
 @v1_router.post("/articles/generate", response_model=GenerateArticleResponse)
 async def generate_article(body: GenerateArticleRequest) -> GenerateArticleResponse:
+    safe_urls = validated_reference_urls(body.reference_urls)
     brief = BlogBrief(
         topic=body.topic.strip(),
-        reference_urls=body.reference_urls,
+        reference_urls=safe_urls,
         target_keywords=body.keywords,
         audience=body.audience,
         tone=body.tone,
@@ -126,6 +134,7 @@ async def generate_article(body: GenerateArticleRequest) -> GenerateArticleRespo
             provider=body.provider,
             manager=mgr,
             persist=body.save_to_db,
+            user_id=resolve_api_owner_user_id(),
         )
     except Exception as exc:
         logger.exception("API generate failed: %s", exc)
@@ -149,6 +158,7 @@ async def generate_article(body: GenerateArticleRequest) -> GenerateArticleRespo
             "markdown": result.md_path,
             "meta": result.meta_path,
             "index": result.index_path,
+            "faq_jsonld": result.faq_jsonld_path,
         },
     )
     if body.notify_webhook:
@@ -161,7 +171,7 @@ async def publish_article(body: PublishRequest) -> PublishResponse:
     title = body.title
     markdown = body.markdown_content
     if body.article_id:
-        record = ArticleRepository().get_by_id(body.article_id)
+        record = _api_article_repo().get_by_id(body.article_id)
         if not record:
             raise HTTPException(status_code=404, detail="Matéria não encontrada.")
         title = title or record.title

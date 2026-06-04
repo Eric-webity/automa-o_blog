@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from db.database import init_db
-from db.repository import ArticleRepository
+from db.repository import ArticleRepository, UserRepository
 
 
 def test_count_llm_articles(tmp_path, monkeypatch) -> None:
@@ -17,15 +17,22 @@ def test_count_llm_articles(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("db.database._SessionLocal", None)
 
     init_db()
-    repo = ArticleRepository()
+    user = UserRepository().create(
+        name="Analytics",
+        email="analytics@test.local",
+        password="secret123",
+    )
+    repo = ArticleRepository(user_id=user.id)
     repo.create(
         title="Com IA",
         markdown_content="# teste",
         json_index={"used_llm": True, "generation_mode": "openai"},
+        user_id=user.id,
     )
     repo.create(
         title="Local",
         markdown_content="# local",
         json_index={"used_llm": False, "generation_mode": "local"},
+        user_id=user.id,
     )
     assert repo.count_llm_articles() == 1

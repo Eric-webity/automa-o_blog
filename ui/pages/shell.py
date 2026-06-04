@@ -10,9 +10,11 @@ from typing import Callable
 
 from nicegui import ui
 
-from ui.auth import is_authenticated, logout, session_email
+from ui.auth import is_authenticated, logout, session_email, session_name
+from ui.session_scope import sync_config_session
+from ui.components.background_job_panel import mount_global_job_indicator
 from ui.layout import _config_panel, apply_styles
-from ui.pages.routes import NAV_ITEMS, ROUTE_LOGIN
+from ui.pages.routes import ROUTE_LOGIN, nav_items_for_session
 
 
 def render_page(config, active_path: str, builder: Callable[[object], None]) -> None:
@@ -24,6 +26,7 @@ def render_page(config, active_path: str, builder: Callable[[object], None]) -> 
     if not is_authenticated():
         ui.navigate.to(ROUTE_LOGIN)
         return
+    sync_config_session(config)
     config.handle_logout = lambda: (logout(), ui.navigate.to(ROUTE_LOGIN))
     _render_shell(config, active_path, builder)
 
@@ -73,11 +76,22 @@ def _render_shell(config, active_path: str, builder: Callable[[object], None]) -
                             _render_nav(active_path)
 
                     with ui.element("div").classes("side-nav-bar__config"):
+                        mount_global_job_indicator()
                         ui.label("Configuração").classes("side-nav-bar__config-title")
                         _config_panel(config)
                         user_email = session_email()
-                        if user_email:
-                            ui.label(user_email).classes("geo-meta-caption mt-3 truncate")
+                        user_name = session_name()
+                        if user_email or user_name:
+                            ui.label("Conta ativa").classes(
+                                "geo-meta-caption mt-3 font-medium"
+                            )
+                            if user_name:
+                                ui.label(user_name).classes("geo-meta-caption truncate")
+                            if user_email:
+                                ui.label(user_email).classes("geo-meta-caption truncate")
+                            ui.label("Histórico isolado por login").classes(
+                                "geo-meta-caption text-primary"
+                            )
                         ui.button(
                             "Sair", icon="logout", on_click=config.handle_logout
                         ).props("flat no-caps dense color=primary").classes(
@@ -91,16 +105,17 @@ def _render_shell(config, active_path: str, builder: Callable[[object], None]) -
 
 def _render_nav(active_path: str) -> None:
     """Barra de navegação vertical que troca de rota ao clicar."""
+    nav_items = nav_items_for_session()
     active_label = next(
-        (label for path, label, _ in NAV_ITEMS if path == active_path), None
+        (label for path, label, _ in nav_items if path == active_path), None
     )
     with ui.tabs(value=active_label).props("vertical inline-label no-caps").classes(
         "w-full"
     ) as tabs:
-        for _path, label, icon in NAV_ITEMS:
+        for _path, label, icon in nav_items:
             ui.tab(label, icon=icon)
 
-    label_to_path = {label: path for path, label, _ in NAV_ITEMS}
+    label_to_path = {label: path for path, label, _ in nav_items}
 
     def on_change(event) -> None:
         target = label_to_path.get(event.value)

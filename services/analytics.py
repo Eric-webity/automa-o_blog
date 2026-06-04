@@ -9,6 +9,9 @@ from config.paths import DATA_DIR, DB_PATH, OUTPUT_DIR
 from config.production import load_production_settings
 from db.repository import ArticleRecord, ArticleRepository
 from services.ai_manager import AIManager
+from services.ai_usage import format_cost_usd, format_tokens, get_ai_usage_stats
+from services.similarity_check import similarity_threshold
+from services.url_cache import cache_file_count, cache_ttl_hours, is_cache_enabled
 
 
 def _file_size(path: Path) -> int:
@@ -92,9 +95,9 @@ def _recent_summaries(records: list[ArticleRecord]) -> list[dict]:
     return items
 
 
-def get_dashboard_stats() -> dict:
-    """Retorna estatísticas completas do Content Studio."""
-    repo = ArticleRepository()
+def get_dashboard_stats(*, user_id: int | None = None) -> dict:
+    """Retorna estatísticas do Content Studio (por conta quando ``user_id`` é informado)."""
+    repo = ArticleRepository(user_id=user_id)
     base = repo.count_stats()
     total = int(base.get("total", 0))
     llm_count = repo.count_llm_articles()
@@ -107,6 +110,7 @@ def get_dashboard_stats() -> dict:
     settings = load_production_settings()
     db_bytes = _file_size(DB_PATH)
     output_bytes = _dir_size(OUTPUT_DIR)
+    ai_usage = get_ai_usage_stats()
 
     return {
         "total_articles": total,
@@ -124,4 +128,15 @@ def get_dashboard_stats() -> dict:
         "api_key_configured": bool(settings.api_key),
         "webhook_configured": bool(settings.webhook_url),
         "cms_configured": bool(settings.cms_publish_url),
+        "url_cache_enabled": is_cache_enabled(),
+        "url_cache_entries": cache_file_count(),
+        "url_cache_ttl_hours": int(cache_ttl_hours()),
+        "similarity_threshold_pct": int(similarity_threshold() * 100),
+        "ai_usage": ai_usage,
+        "ai_cost_7d_label": format_cost_usd(
+            ai_usage.get("last_7_days", {}).get("cost_usd", 0)
+        ),
+        "ai_tokens_7d_label": format_tokens(
+            ai_usage.get("last_7_days", {}).get("total_tokens", 0)
+        ),
     }

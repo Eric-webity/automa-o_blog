@@ -1,0 +1,27 @@
+# Preços de referência em USD por 1 milhão de tokens (input, output).
+# Ajuste conforme a sua fatura real; valores aproximados para estimativa no Dashboard.
+models:
+  gpt-4o-mini:
+    input_per_million: 0.15
+    output_per_million: 0.60
+  gpt-4o:
+    input_per_million: 2.50
+    output_per_million: 10.00
+  claude-3-haiku-20240307:
+    input_per_million: 0.25
+    output_per_million: 1.25
+  claude-3-5-sonnet-20241022:
+    input_per_million: 3.00
+    output_per_million: 15.00
+  openai/gpt-4o-mini:
+    input_per_million: 0.15
+    output_per_million: 0.60
+  llama3:
+    input_per_million: 0
+    output_per_million: 0
+default:
+  input_per_million: 1.00
+  output_per_million: 3.00
+local_providers:
+  - ollama
+  - lmstudio

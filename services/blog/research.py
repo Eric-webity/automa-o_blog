@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from core.ai_index_builder import build_ai_index
 from core.geo_engine import GeoInputs, generate_geo_skeleton
+from core.geo_niches import enrich_inputs, normalize_niche_id
 from core.insight_extractor import ArticleInsight, extract_insights, merge_insights
 from services.article_fetcher import UrlFetchStats, fetch_many_with_stats
 from services.blog.brief import BlogBrief
@@ -12,7 +13,7 @@ from services.blog.length import expand_skeleton_for_long
 
 def build_geo_inputs(brief: BlogBrief, merged: dict[str, str]) -> GeoInputs:
     """Monta entradas GEO a partir do briefing e insights fundidos."""
-    return GeoInputs(
+    raw = GeoInputs(
         tema_central=merged.get("tema_central", brief.topic),
         entidade_intencao=merged.get("entidade_intencao", brief.audience),
         selos_certificacoes=merged.get("selos_certificacoes", ""),
@@ -20,6 +21,7 @@ def build_geo_inputs(brief: BlogBrief, merged: dict[str, str]) -> GeoInputs:
             "criterios_comparacao", ", ".join(brief.target_keywords[:4])
         ),
     )
+    return enrich_inputs(raw, normalize_niche_id(brief.geo_niche))
 
 
 def collect_reference_insights(
@@ -59,6 +61,6 @@ def prepare_geo_context(
     )
     geo = build_geo_inputs(brief, merged)
     ai_index = build_ai_index(insights, geo.tema_central)
-    skeleton = generate_geo_skeleton(geo)
+    skeleton = generate_geo_skeleton(geo, niche_id=brief.geo_niche)
     skeleton = expand_skeleton_for_long(brief, skeleton)
     return insights, merged, geo, ai_index, skeleton, fetch_stats

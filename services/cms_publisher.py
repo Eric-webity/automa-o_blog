@@ -85,3 +85,18 @@ async def publish_to_external_cms(
     except httpx.HTTPError as exc:
         logger.exception("Falha de conexão com CMS: %s", exc)
         return ExternalPublishResult(success=False, message=str(exc))
+
+
+async def send_test_cms_publish() -> ExternalPublishResult:
+    """Envia artigo de teste para validar GEO_CMS_PUBLISH_URL."""
+    settings = load_production_settings()
+    return await publish_to_external_cms(
+        title="[GEO] Teste de CMS",
+        markdown_content=(
+            "# Teste GEO Extractor\n\n"
+            "Publicação de teste. Pode apagar este rascunho no CMS."
+        ),
+        meta_description="Teste de integração com CMS externo",
+        slug="geo-cms-test",
+        status=settings.cms_default_status,
+    )

@@ -13,7 +13,9 @@ def register_pages(config) -> None:
 
     from ui.auth import is_authenticated
     from ui.pages import (
+        admin,
         auth_pages,
+        batch,
         blog,
         dashboard,
         history,
@@ -28,11 +30,13 @@ def register_pages(config) -> None:
     auth_pages.register(config)
     dashboard.register(config)
     blog.register(config)
+    batch.register(config)
     urls.register(config)
     text.register(config)
     json_page.register(config)
     history.register(config)
     profile.register(config)
+    admin.register(config)
     settings.register(config)
 
     @ui.page(ROUTE_HOME)

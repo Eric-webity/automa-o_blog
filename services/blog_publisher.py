@@ -28,13 +28,16 @@ async def save_post_to_blog(
     json_index: dict | None = None,
     article_id: int | None = None,
     status: str = ArticleStatus.DRAFT.value,
+    user_id: int | None = None,
 ) -> BlogPublishResult:
     """Cria ou atualiza matéria no histórico local (não envia para CMS externo)."""
     if not (markdown_content or "").strip():
         raise ValueError("O conteúdo do artigo está vazio.")
 
     clean_title = (title or "").strip() or "Sem título"
-    repo = ArticleRepository()
+    if user_id is None:
+        raise ValueError("user_id é obrigatório para salvar no histórico.")
+    repo = ArticleRepository(user_id=user_id)
 
     def _persist() -> ArticleRecord:
         if article_id is not None:
@@ -53,6 +56,7 @@ async def save_post_to_blog(
             markdown_content=markdown_content,
             json_index=json_index,
             status=status,
+            user_id=user_id,
         )
 
     try:

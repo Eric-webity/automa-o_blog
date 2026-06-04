@@ -72,70 +72,11 @@ def validate_inputs(tema_central: str) -> str | None:
     return None
 
 
-def generate_geo_skeleton(inputs: GeoInputs) -> GeoSkeleton:
-    tema = _clean(inputs.tema_central)
-    entidade = _fallback_entidade(_clean(inputs.entidade_intencao), tema)
-    selos = _fallback_selos(_clean(inputs.selos_certificacoes))
-    criterios = _fallback_criterios(_clean(inputs.criterios_comparacao))
+def generate_geo_skeleton(
+    inputs: GeoInputs,
+    niche_id: str | None = None,
+) -> GeoSkeleton:
+    """Gera esqueleto GEO; ``niche_id`` escolhe blocos por área (saúde, finanças, SaaS)."""
+    from core.geo_niches import build_skeleton
 
-    h1_style = pick_h1_style(tema)
-    h1 = build_h1(tema, h1_style)
-
-    blocks: list[GeoBlock] = [
-        GeoBlock(
-            level=2,
-            heading=f"## Segurança e Confiabilidade em {entidade}",
-        ),
-        GeoBlock(
-            level=3,
-            heading=f"### Garantias e Normas: {selos}",
-            instruction=(
-                "_Instrução ao redator:_ cite selos, normas (ex.: ISO), auditorias e "
-                "garantias com fonte verificável. Use frases-resposta de 1–2 linhas "
-                "para facilitar citação por IAs (GEO)."
-            ),
-        ),
-        GeoBlock(
-            level=2,
-            heading=f"## A Ciência por trás de {tema}",
-        ),
-        GeoBlock(
-            level=3,
-            heading="### Evidências, Métricas e Limitações",
-            instruction=(
-                "_Instrução ao redator:_ inclua dados mensuráveis, estudos ou benchmarks, "
-                "mecanismo de ação quando aplicável, e limitações honestas. "
-                "Priorize blocos de 134–167 palavras com resposta direta no primeiro parágrafo."
-            ),
-        ),
-        GeoBlock(
-            level=3,
-            heading="### Melhores Práticas e Resultados Esperados",
-            instruction=(
-                "_Instrução ao redator:_ descreva expectativas, prazos realistas e "
-                "sinais de progresso verificáveis."
-            ),
-        ),
-        GeoBlock(
-            level=2,
-            heading="## Comparativo de Mercado e Alternativas",
-        ),
-        GeoBlock(
-            level=3,
-            heading=f"### Critérios de Escolha: {criterios}",
-            instruction=(
-                "_Instrução ao redator:_ comparativo objetivo, prós/contras e "
-                "recomendação por perfil de utilizador."
-            ),
-        ),
-    ]
-
-    lines = [h1, ""]
-    for block in blocks:
-        lines.append(block.heading)
-        if block.instruction:
-            lines.append(block.instruction)
-        lines.append("")
-
-    markdown = "\n".join(lines).rstrip() + "\n"
-    return GeoSkeleton(h1=h1, blocks=tuple(blocks), markdown=markdown, h1_style=h1_style)
+    return build_skeleton(inputs, niche_id)

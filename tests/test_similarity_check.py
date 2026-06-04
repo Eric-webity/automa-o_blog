@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from core.insight_extractor import ArticleInsight
-from services.similarity_check import analyze_source_similarity, check_source_similarity
+from services.similarity_check import (
+    analyze_pasted_text_similarity,
+    analyze_source_similarity,
+    check_source_similarity,
+)
 
 
 def _insight(text: str) -> ArticleInsight:
@@ -26,7 +30,9 @@ def _insight(text: str) -> ArticleInsight:
 
 def test_no_warning_when_different() -> None:
     md = "# Título\n\nParágrafo original totalmente diferente do texto da fonte de referência usada no teste."
-    msg = check_source_similarity(md, [_insight("Outro assunto sobre economia e mercados.")])
+    msg = check_source_similarity(
+        md, [_insight("Outro assunto sobre economia e mercados.")]
+    )
     assert msg is None
 
 
@@ -45,3 +51,20 @@ def test_warning_when_paragraph_matches_source() -> None:
     assert report.severity == "high"
     assert report.ratio >= 0.85
     assert report.paragraph_excerpt
+
+
+def test_pasted_text_similarity_detects_copy() -> None:
+    source = (
+        "A automação de marketing ajuda equipas pequenas a nutrir leads "
+        "com sequências personalizadas e métricas claras de conversão."
+    )
+    md = f"# Guia\n\n{source}\n\nConclusão breve."
+    report = analyze_pasted_text_similarity(md, source, threshold=0.85)
+    assert report is not None
+    assert report.ratio >= 0.85
+
+
+def test_pasted_text_no_warning_when_rewritten() -> None:
+    source = "Texto original sobre logística portuária e contentores refrigerados."
+    md = "# Novo ângulo\n\nResumo editorial distinto sobre cadeias frias e exportação."
+    assert analyze_pasted_text_similarity(md, source, threshold=0.85) is None

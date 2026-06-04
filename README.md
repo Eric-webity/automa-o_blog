@@ -68,6 +68,7 @@ Variáveis de ambiente — copie `.env.example` para `.env` e configure chaves d
 | Variável | Descrição |
 |----------|-----------|
 | `GEO_ENV` | `development` ou `production` |
+| `GEO_STORAGE_SECRET` | Segredo que assina cookies de sessão da UI (**obrigatório** em produção, ≥32 caracteres). Ver [docs/PRODUCAO_SESSOES.md](docs/PRODUCAO_SESSOES.md) |
 | `GEO_API_KEY` | Chave para `X-API-Key` ou `Authorization: Bearer` |
 | `GEO_API_ENABLED` | `true` / `false` |
 | `GEO_WEBHOOK_URL` | POST após gerar matéria via API |
@@ -138,7 +139,8 @@ api  →  services  →  db
 ```
 
 - Importe de **`core/`** e **`services/`**; evite **`modules/`** (shims antigos).
-- Detalhes, fluxos e plano de evolução: **[docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md](docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md)**.
+- Regras para código novo: **[AGENTS.md](AGENTS.md)** (camadas e dependências).
+- Roadmap e estado das fases: **[docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md](docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md)**.
 
 ## Testes
 
@@ -159,7 +161,8 @@ Se aparecer `ModuleNotFoundError: No module named 'core'`, confirme que está na
 
 | Documento | Para quem |
 |-----------|-----------|
-| **[Organização e próximos passos](docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md)** | Desenvolvedores — estrutura, dependências, roadmap |
+| **[AGENTS.md](AGENTS.md)** | Desenvolvedores — onde colocar código, o que não importar |
+| **[Organização e próximos passos](docs/ORGANIZACAO_E_PROXIMOS_PASSOS.md)** | Roadmap, fases B–D, glossário |
 | **[Manual do sistema](docs/MANUAL.md)** | Utilizadores — abas, Índice IA, fluxos de geração |
 | [Resumo técnico](docs/RESUMO_TECNICO.md) | Arquitetura detalhada, limitações, decisões |
 | [Executável Windows](docs/EXECUTABLE.md) | Build com `.\scripts\build_exe.ps1` |

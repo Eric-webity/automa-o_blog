@@ -22,21 +22,18 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from modules import (
-    AIManager,
-    BlogBrief,
+from core import (
     GeoInputs,
     build_ai_index,
     extract_geo_signals,
-    extract_insights,
     extract_insights_from_text,
-    fetch_many,
-    generate_blog_post,
-    generate_full_article,
     generate_geo_skeleton,
-    merge_insights,
 )
-from modules.blog_brief import parse_keywords
+from core.insight_extractor import extract_insights, merge_insights
+from services.ai_manager import AIManager
+from services.article_fetcher import fetch_many
+from services.article_writer import generate_full_article
+from services.blog import BlogBrief, generate_blog_post, parse_keywords
 
 load_dotenv(ROOT / ".env")
 

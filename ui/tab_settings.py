@@ -24,6 +24,8 @@ from config.settings_store import (
     write_provider_flags,
 )
 from services.analytics import check_api_health, get_dashboard_stats
+from ui.auth import require_session_user_id
+from services.similarity_check import similarity_threshold
 from services.url_cache import (
     cache_file_count,
     cache_ttl_hours,
@@ -236,7 +238,8 @@ def build_tab_settings(config) -> None:
 
         async def load_usage_panel() -> None:
             try:
-                data = await run.io_bound(get_dashboard_stats)
+                owner_id = require_session_user_id()
+                data = await run.io_bound(lambda: get_dashboard_stats(user_id=owner_id))
                 health = await run.io_bound(check_api_health)
             except RuntimeError:
                 return
@@ -283,6 +286,12 @@ def build_tab_settings(config) -> None:
 
                 with ui.element("section").classes("geo-glass-card w-full"):
                     ui.label("Integrações").classes("geo-section-title mb-3")
+                    ui.button(
+                        "Webhook e CMS no Dashboard",
+                        icon="settings_ethernet",
+                        on_click=lambda: ui.navigate.to(ROUTE_DASHBOARD),
+                    ).props("outline dense").classes("w-full mb-3")
+
                     for label, ok in (
                         ("API REST", data.get("api_key_configured")),
                         ("Webhook", data.get("webhook_configured")),
@@ -336,6 +345,18 @@ def build_tab_settings(config) -> None:
                         "Limpar cache de URLs",
                         on_click=lambda: asyncio.create_task(clear_cache()),
                     ).props("outline dense").classes("w-full mt-2")
+
+                with ui.element("section").classes("geo-glass-card w-full mt-4"):
+                    ui.label("Similaridade editorial").classes("geo-section-title mb-2")
+                    limit_pct = int(similarity_threshold() * 100)
+                    ui.label(
+                        f"Limiar atual: {limit_pct}% de sobreposição entre parágrafos "
+                        "da matéria e o texto das fontes."
+                    ).classes("text-caption text-grey-7")
+                    ui.label(
+                        "Ajuste em `.env` com GEO_SIMILARITY_THRESHOLD (0.0–1.0). "
+                        "Valores mais baixos alertam mais cedo."
+                    ).classes("text-caption text-grey-7 mt-1")
 
         def build_form() -> None:
             nonlocal ollama_input, lmstudio_input, lmstudio_model_input

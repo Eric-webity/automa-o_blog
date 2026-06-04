@@ -7,7 +7,7 @@ from starlette.testclient import TestClient
 
 from api.routes import create_api_app
 from db.database import init_db
-from db.repository import ArticleRepository
+from db.repository import ArticleRepository, UserRepository
 
 
 @pytest.fixture
@@ -45,7 +45,9 @@ def test_stats_without_key_in_dev(api_client: TestClient) -> None:
     assert "by_status" in data
 
 
-def test_stats_requires_key_when_configured(api_client: TestClient, monkeypatch) -> None:
+def test_stats_requires_key_when_configured(
+    api_client: TestClient, monkeypatch
+) -> None:
     monkeypatch.setenv("GEO_API_KEY", "test-secret-key")
     response = api_client.get("/api/v1/stats")
     assert response.status_code == 401
@@ -58,7 +60,16 @@ def test_stats_requires_key_when_configured(api_client: TestClient, monkeypatch)
 
 
 def test_list_and_get_article(api_client: TestClient) -> None:
-    record = ArticleRepository().create(title="API Test", markdown_content="# Olá")
+    user = UserRepository().create(
+        name="API User",
+        email="api@test.local",
+        password="secret123",
+    )
+    record = ArticleRepository(user_id=user.id).create(
+        title="API Test",
+        markdown_content="# Olá",
+        user_id=user.id,
+    )
 
     listed = api_client.get("/api/v1/articles")
     assert listed.status_code == 200
@@ -72,7 +83,16 @@ def test_list_and_get_article(api_client: TestClient) -> None:
 
 
 def test_delete_article(api_client: TestClient) -> None:
-    record = ArticleRepository().create(title="Apagar", markdown_content="x")
+    user = UserRepository().create(
+        name="API User 2",
+        email="api2@test.local",
+        password="secret123",
+    )
+    record = ArticleRepository(user_id=user.id).create(
+        title="Apagar",
+        markdown_content="x",
+        user_id=user.id,
+    )
     response = api_client.delete(f"/api/v1/articles/{record.id}")
     assert response.status_code == 204
-    assert ArticleRepository().get_by_id(record.id) is None
+    assert ArticleRepository(user_id=user.id).get_by_id(record.id) is None

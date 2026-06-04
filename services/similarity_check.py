@@ -65,7 +65,7 @@ def _excerpt(text: str, max_len: int = 140) -> str:
     t = (text or "").strip()
     if len(t) <= max_len:
         return t
-    return t[: max_len - 1].rstrip() + "…"
+    return t[: max_len - 1].rstrip() + "..."
 
 
 def _build_message(ratio: float, *, severity: str) -> str:
@@ -142,3 +142,60 @@ def check_source_similarity(
     """Alerta textual se a matéria for muito próxima das fontes."""
     report = analyze_source_similarity(markdown, insights, threshold=threshold)
     return report.message if report else None
+
+
+def _paragraph_chunks(text: str) -> list[str]:
+    chunks: list[str] = []
+    for block in re.split(r"\n\s*\n", text or ""):
+        plain = re.sub(r"\s+", " ", block.strip())
+        if len(plain) >= _MIN_CHUNK_LEN:
+            chunks.append(plain[:4000])
+    if not chunks and len((text or "").strip()) >= _MIN_CHUNK_LEN:
+        chunks.append(re.sub(r"\s+", " ", text.strip())[:4000])
+    return chunks
+
+
+def analyze_pasted_text_similarity(
+    generated_markdown: str,
+    source_text: str,
+    *,
+    threshold: float | None = None,
+) -> SimilarityReport | None:
+    """Compara artigo gerado com o texto colado (aba Texto manual)."""
+    if not generated_markdown.strip() or not source_text.strip():
+        return None
+
+    limit = threshold if threshold is not None else similarity_threshold()
+    paragraphs = _markdown_paragraphs(generated_markdown)
+    sources = _paragraph_chunks(source_text)
+    if not paragraphs or not sources:
+        return None
+
+    best_ratio = 0.0
+    best_para = ""
+    for para in paragraphs:
+        norm_para = _normalize(para)
+        if len(norm_para) < _MIN_CHUNK_LEN:
+            continue
+        for src in sources:
+            norm_src = _normalize(src)
+            ratio = SequenceMatcher(None, norm_para, norm_src).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_para = para
+            if ratio >= limit:
+                return SimilarityReport(
+                    ratio=ratio,
+                    severity="high",
+                    message=_build_message(ratio, severity="high"),
+                    paragraph_excerpt=_excerpt(para),
+                )
+
+    if best_ratio >= limit * 0.95:
+        return SimilarityReport(
+            ratio=best_ratio,
+            severity="borderline",
+            message=_build_message(best_ratio, severity="borderline"),
+            paragraph_excerpt=_excerpt(best_para),
+        )
+    return None

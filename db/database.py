@@ -11,7 +11,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from config.paths import DATA_DIR, DB_PATH
-from db.models import Base
+import os
+
+from db.models import Base, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,63 @@ def _migrate_blog_profile_columns(engine: Engine) -> None:
                 conn.execute(text(f"ALTER TABLE blog_profile ADD COLUMN {column} {ddl}"))
 
 
+def _migrate_articles_user_id(engine: Engine) -> None:
+    """Adiciona ``user_id`` e associa matérias antigas ao primeiro utilizador."""
+    insp = inspect(engine)
+    if not insp.has_table("articles"):
+        return
+    existing = {col["name"] for col in insp.get_columns("articles")}
+    with engine.begin() as conn:
+        if "user_id" not in existing:
+            conn.execute(
+                text("ALTER TABLE articles ADD COLUMN user_id INTEGER REFERENCES users(id)")
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_articles_user_id ON articles (user_id)"))
+        if not insp.has_table("users"):
+            return
+        owner_id = conn.execute(
+            text("SELECT id FROM users ORDER BY id ASC LIMIT 1")
+        ).scalar()
+        if owner_id is not None:
+            conn.execute(
+                text("UPDATE articles SET user_id = :uid WHERE user_id IS NULL"),
+                {"uid": owner_id},
+            )
+
+
+def _migrate_users_role(engine: Engine) -> None:
+    """Adiciona coluna ``role`` e garante pelo menos um administrador."""
+    insp = inspect(engine)
+    if not insp.has_table("users"):
+        return
+    existing = {col["name"] for col in insp.get_columns("users")}
+    with engine.begin() as conn:
+        if "role" not in existing:
+            conn.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN role VARCHAR(16) "
+                    f"NOT NULL DEFAULT '{UserRole.USER.value}'"
+                )
+            )
+        conn.execute(
+            text(
+                "UPDATE users SET role = :admin WHERE id = ("
+                "SELECT id FROM users ORDER BY id ASC LIMIT 1"
+                ") AND NOT EXISTS (SELECT 1 FROM users WHERE role = :admin)"
+            ),
+            {"admin": UserRole.ADMIN.value},
+        )
+        admin_email = (
+            os.getenv("GEO_ADMIN_EMAIL", "").strip().lower()
+            or os.getenv("GEO_LOGIN_EMAIL", "").strip().lower()
+        )
+        if admin_email:
+            conn.execute(
+                text("UPDATE users SET role = :admin WHERE lower(email) = :email"),
+                {"admin": UserRole.ADMIN.value, "email": admin_email},
+            )
+
+
 def get_database_url() -> str:
     """Retorna URL SQLAlchemy para o SQLite local."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,6 +114,8 @@ def init_db() -> None:
     )
     Base.metadata.create_all(_engine)
     _migrate_blog_profile_columns(_engine)
+    _migrate_users_role(_engine)
+    _migrate_articles_user_id(_engine)
     _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False)
     logger.info("Base de dados inicializada em %s", DB_PATH)
 

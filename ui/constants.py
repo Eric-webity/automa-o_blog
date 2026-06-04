@@ -80,6 +80,17 @@ BLOG_WORD_COUNT_OPTIONS: dict[str, int] = {
 
 BLOG_WORD_COUNT_DEFAULT = 2500
 
+# --- Modelos GEO por nicho ---
+
+def geo_niche_select_options() -> dict[str, str]:
+    """Rótulo → id para ui.select (Saúde, Finanças, SaaS, …)."""
+    from core.geo_niches import list_niches
+
+    return {meta.label: meta.id for meta in list_niches()}
+
+
+GEO_NICHE_DEFAULT = "generic"
+
 # --- API (dashboard) ---
 
 API_ROUTES: tuple[tuple[str, str, str], ...] = (

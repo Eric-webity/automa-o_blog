@@ -67,6 +67,10 @@ def _finalize_package(
     faq_items = meta.get("faq") or []
     if not (isinstance(faq_items, list) and faq_items and isinstance(faq_items[0], dict)):
         faq_items = []
+    if not faq_items:
+        from core.faq_jsonld import extract_faq_from_markdown
+
+        faq_items = extract_faq_from_markdown(body)
 
     return BlogPostPackage(
         markdown=body,

@@ -30,6 +30,7 @@ class BlogResult:
     article_id: int | None
     fallback_reason: str | None
     warning: str | None
+    faq_jsonld_path: str | None = None
     similarity_warning: str | None = None
     similarity_ratio: float | None = None
     similarity_severity: str | None = None
@@ -95,6 +96,7 @@ def _finalize_blog_result(
     meta_path: str,
     index_path: str | None,
     article_id: int | None,
+    faq_jsonld_path: str | None = None,
     use_llm: bool,
 ) -> BlogResult:
     """Monta BlogResult com avisos calculados."""
@@ -105,6 +107,7 @@ def _finalize_blog_result(
         md_path=md_path,
         meta_path=meta_path,
         index_path=index_path,
+        faq_jsonld_path=faq_jsonld_path,
         article_id=article_id,
         fallback_reason=_build_fallback_reason(package, use_llm),
         warning=_build_warning(package),
@@ -131,14 +134,20 @@ def _persist_article(
     package: BlogPostPackage,
     brief: BlogBrief,
     article_id: int | None = None,
+    *,
+    user_id: int | None = None,
 ) -> int | None:
     """Salva matéria no blog local (SQLite).
 
     Quando ``article_id`` é informado, atualiza o registro existente (evitando
     duplicatas ao regenerar). Se o registro não existir mais, cria um novo.
     """
+    if user_id is None:
+        logger.warning("Persistência ignorada: user_id ausente (sessão não associada).")
+        return None
+
     try:
-        repo = ArticleRepository()
+        repo = ArticleRepository(user_id=user_id)
         title = (package.meta_title or brief.topic).strip() or "Sem título"
         index_payload = _enrich_index_for_storage(package)
         if article_id is not None:
@@ -154,6 +163,7 @@ def _persist_article(
             title=title,
             markdown_content=package.markdown,
             json_index=index_payload,
+            user_id=user_id,
         )
         return record.id
     except Exception as exc:
@@ -170,6 +180,7 @@ def run_blog_pipeline(
     manager: AIManager | None = None,
     persist: bool = True,
     article_id: int | None = None,
+    user_id: int | None = None,
 ) -> BlogResult:
     """Executa geração, artefatos em disco e persistência no blog local."""
     package = generate_blog_post(
@@ -189,16 +200,19 @@ def run_blog_pipeline(
         "word_count_actual": package.word_count_actual,
         "generation_mode": package.generation_mode,
     }
-    md_path, meta_path, index_path = save_blog_artifacts(
+    md_path, meta_path, index_path, faq_jsonld_path = save_blog_artifacts(
         package.slug, package.markdown, meta_payload, package.ai_index or None
     )
-    saved_id = _persist_article(package, brief, article_id) if persist else None
+    saved_id = (
+        _persist_article(package, brief, article_id, user_id=user_id) if persist else None
+    )
     return _finalize_blog_result(
         package=package,
         meta_payload=meta_payload,
         md_path=md_path,
         meta_path=meta_path,
         index_path=index_path,
+        faq_jsonld_path=faq_jsonld_path,
         article_id=saved_id,
         use_llm=use_llm,
     )
@@ -214,6 +228,7 @@ async def run_blog_pipeline_async(
     on_progress=None,
     persist: bool = True,
     article_id: int | None = None,
+    user_id: int | None = None,
 ) -> BlogResult:
     """Versão assíncrona com pipeline multi-agente quando disponível."""
     if use_llm:
@@ -247,16 +262,19 @@ async def run_blog_pipeline_async(
         "word_count_actual": package.word_count_actual,
         "generation_mode": package.generation_mode,
     }
-    md_path, meta_path, index_path = save_blog_artifacts(
+    md_path, meta_path, index_path, faq_jsonld_path = save_blog_artifacts(
         package.slug, package.markdown, meta_payload, package.ai_index or None
     )
-    saved_id = _persist_article(package, brief, article_id) if persist else None
+    saved_id = (
+        _persist_article(package, brief, article_id, user_id=user_id) if persist else None
+    )
     return _finalize_blog_result(
         package=package,
         meta_payload=meta_payload,
         md_path=md_path,
         meta_path=meta_path,
         index_path=index_path,
+        faq_jsonld_path=faq_jsonld_path,
         article_id=saved_id,
         use_llm=use_llm,
     )

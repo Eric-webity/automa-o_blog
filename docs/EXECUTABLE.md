@@ -13,8 +13,9 @@ Saída: `dist\GEO-Extractor\GEO-Extractor.exe`
 
 1. Abra a pasta `dist\GEO-Extractor\`
 2. Copie `.env.example` → `.env` e configure chaves de IA
-3. Execute `GEO-Extractor.exe` — o browser abre em `http://localhost:8080`
-4. Configure o **webhook** na aba **Dashboard** (secção «Webhook»)
+3. Em deploy exposto à rede: `GEO_ENV=production` e `GEO_STORAGE_SECRET` (ver [PRODUCAO_SESSOES.md](PRODUCAO_SESSOES.md))
+4. Execute `GEO-Extractor.exe` — o browser abre em `http://localhost:8080`
+5. Configure o **webhook** na aba **Dashboard** (secção «Webhook»)
 
 ## Pastas ao lado do .exe
 
