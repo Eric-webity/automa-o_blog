@@ -7,7 +7,7 @@ Base estável do **GEO Extractor (Content Studio)**. Siga estas regras antes de 
 | Camada | Pasta | Responsabilidade |
 |--------|-------|------------------|
 | Entrada | `main.py` | NiceGUI + registo da API |
-| UI | `ui/` | Páginas, abas, auth, componentes visuais |
+| UI | `ui/` | Páginas (`pages/`), conteúdo (`tab_*.py`), componentes — ver `ui/README.md` |
 | API | `api/` | REST FastAPI (`/api/health`, `/api/v1/*`) |
 | Serviços | `services/` | IA, pipelines, fetch, batch, analytics, jobs |
 | Motor GEO | `core/` | Esqueleto, índice, insights, FAQ JSON-LD (sem HTTP/DB) |
@@ -36,6 +36,7 @@ api  →  services  →  db
 | Regra GEO pura | `core/` |
 | Tabela ou query SQLite | `db/models.py` + `db/repository.py` |
 | Variável de ambiente | `.env.example` + `config/production.py` se for produção |
+| Cores / tema UI | `ui/design_tokens.css` (tokens); `ui/style.css` (componentes) |
 | Prompt editorial | `skills/*.md` |
 | Validação / checklist | `services/article_validation.py`, `ui/components/geo_checklist.py`, `brief_preflight.py`, `article_review_panel.py` |
 

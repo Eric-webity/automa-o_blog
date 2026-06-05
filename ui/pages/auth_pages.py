@@ -19,7 +19,7 @@ def register(config) -> None:
         if is_authenticated():
             ui.navigate.to(ROUTE_DASHBOARD)
             return
-        with ui.column().classes("geo-app-root w-full min-h-screen"):
+        with ui.column().classes("geo-app-root geo-auth-page-root w-full min-h-screen"):
             render_login_gate(
                 config,
                 on_success=lambda: (
@@ -35,7 +35,7 @@ def register(config) -> None:
         if is_authenticated():
             ui.navigate.to(ROUTE_DASHBOARD)
             return
-        with ui.column().classes("geo-app-root w-full min-h-screen"):
+        with ui.column().classes("geo-app-root geo-auth-page-root w-full min-h-screen"):
             render_signup_gate(
                 config,
                 on_success=lambda: (

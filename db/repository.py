@@ -355,7 +355,14 @@ class UserRepository:
             ).all()
             return [_to_user_record(row) for row in rows]
 
-    def create(self, *, name: str, email: str, password: str) -> UserRecord:
+    def create(
+        self,
+        *,
+        name: str,
+        email: str,
+        password: str,
+        role: str | None = None,
+    ) -> UserRecord:
         normalized_email = email.strip().lower()
         display_name = name.strip()[:200]
         with session_scope() as session:
@@ -365,7 +372,12 @@ class UserRepository:
             if existing:
                 raise ValueError("Este e-mail já está cadastrado.")
             user_count = int(session.scalar(select(func.count(User.id))) or 0)
-            role = UserRole.ADMIN.value if user_count == 0 else UserRole.USER.value
+            if role is None:
+                role = UserRole.ADMIN.value if user_count == 0 else UserRole.USER.value
+            else:
+                role = role.strip().lower()
+                if role not in {UserRole.USER.value, UserRole.ADMIN.value}:
+                    raise ValueError("Papel inválido.")
             row = User(
                 name=display_name,
                 email=normalized_email,
@@ -387,6 +399,29 @@ class UserRepository:
                 return None
             return _to_user_record(row)
 
+    def count_articles(self, user_id: int) -> int:
+        """Número de matérias associadas ao utilizador."""
+        with session_scope() as session:
+            return int(
+                session.scalar(
+                    select(func.count(Article.id)).where(Article.user_id == user_id)
+                )
+                or 0
+            )
+
+    def _ensure_not_last_admin_demotion(
+        self, session: Session, row: User, new_role: str
+    ) -> None:
+        if row.role == UserRole.ADMIN.value and new_role == UserRole.USER.value:
+            admins = int(
+                session.scalar(
+                    select(func.count(User.id)).where(User.role == UserRole.ADMIN.value)
+                )
+                or 0
+            )
+            if admins <= 1:
+                raise ValueError("Não é possível remover o último administrador.")
+
     def set_role(self, user_id: int, role: str) -> UserRecord:
         """Atualiza o papel de um utilizador (``user`` ou ``admin``)."""
         role = role.strip().lower()
@@ -396,7 +431,62 @@ class UserRepository:
             row = session.get(User, user_id)
             if not row:
                 raise ValueError("Utilizador não encontrado.")
-            if row.role == UserRole.ADMIN.value and role == UserRole.USER.value:
+            self._ensure_not_last_admin_demotion(session, row, role)
+            row.role = role
+            session.flush()
+            session.refresh(row)
+            return _to_user_record(row)
+
+    def update(
+        self,
+        user_id: int,
+        *,
+        name: str,
+        email: str,
+        role: str,
+        password: str | None = None,
+    ) -> UserRecord:
+        """Atualiza nome, e-mail, papel e opcionalmente a senha."""
+        display_name = (name or "").strip()[:200]
+        normalized_email = (email or "").strip().lower()
+        if not display_name:
+            raise ValueError("Informe o nome completo.")
+        if "@" not in normalized_email:
+            raise ValueError("Informe um e-mail válido.")
+        role = (role or UserRole.USER.value).strip().lower()
+        if role not in {UserRole.USER.value, UserRole.ADMIN.value}:
+            raise ValueError("Papel inválido.")
+        if password is not None and password != "" and len(password) < 8:
+            raise ValueError("A senha deve ter pelo menos 8 caracteres.")
+
+        with session_scope() as session:
+            row = session.get(User, user_id)
+            if not row:
+                raise ValueError("Utilizador não encontrado.")
+            duplicate = session.scalars(
+                select(User)
+                .where(func.lower(User.email) == normalized_email, User.id != user_id)
+                .limit(1)
+            ).first()
+            if duplicate:
+                raise ValueError("Este e-mail já está cadastrado.")
+            self._ensure_not_last_admin_demotion(session, row, role)
+            row.name = display_name
+            row.email = normalized_email
+            row.role = role
+            if password:
+                row.password_hash = hash_password(password)
+            session.flush()
+            session.refresh(row)
+            return _to_user_record(row)
+
+    def delete(self, user_id: int) -> bool:
+        """Remove conta local. Matérias ficam com ``user_id`` nulo (SET NULL)."""
+        with session_scope() as session:
+            row = session.get(User, user_id)
+            if not row:
+                return False
+            if row.role == UserRole.ADMIN.value:
                 admins = int(
                     session.scalar(
                         select(func.count(User.id)).where(User.role == UserRole.ADMIN.value)
@@ -404,11 +494,10 @@ class UserRepository:
                     or 0
                 )
                 if admins <= 1:
-                    raise ValueError("Não é possível remover o último administrador.")
-            row.role = role
+                    raise ValueError("Não é possível excluir o último administrador.")
+            session.delete(row)
             session.flush()
-            session.refresh(row)
-            return _to_user_record(row)
+            return True
 
 
 class AiUsageRepository:

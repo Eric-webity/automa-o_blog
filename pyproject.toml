@@ -2,6 +2,7 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_mode = "auto"
 filterwarnings = [
     # Starlette/TestClient: migrar para httpx2 quando atualizar dependências
     "ignore::starlette.exceptions.StarletteDeprecationWarning",

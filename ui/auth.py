@@ -166,6 +166,43 @@ def register_user(
     return True, "registered"
 
 
+def admin_create_user(
+    name: str,
+    email: str,
+    password: str,
+    role: str,
+) -> tuple[bool, str]:
+    """Cria conta local (apenas administrador autenticado)."""
+    if not is_admin():
+        return False, "Apenas administradores podem adicionar pessoas."
+
+    name = (name or "").strip()
+    email = (email or "").strip().lower()
+    password = password or ""
+    role = (role or UserRole.USER.value).strip().lower()
+
+    if not name:
+        return False, "Informe o nome completo."
+    if "@" not in email:
+        return False, "Informe um e-mail válido."
+    if len(password) < 8:
+        return False, "A senha deve ter pelo menos 8 caracteres."
+    if role not in {UserRole.USER.value, UserRole.ADMIN.value}:
+        return False, "Papel inválido."
+
+    try:
+        user = UserRepository().create(
+            name=name,
+            email=email,
+            password=password,
+            role=role,
+        )
+    except ValueError as exc:
+        return False, str(exc)
+
+    return True, f"Conta criada para {user.email}."
+
+
 def authenticate(email: str, password: str) -> tuple[bool, str]:
     """Valida credenciais e grava sessão do browser."""
     email = (email or "").strip()

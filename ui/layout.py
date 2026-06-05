@@ -9,17 +9,26 @@ from __future__ import annotations
 
 from nicegui import ui
 
-from config.paths import UI_STYLE_PATH
+from config.paths import UI_DESIGN_TOKENS_PATH, UI_STYLE_PATH
 
 from ui.constants import provider_select_options
 
 
 def apply_styles() -> None:
     """Carrega folha de estilos global do Content Studio."""
+    tokens = (
+        UI_DESIGN_TOKENS_PATH.read_text(encoding="utf-8")
+        if UI_DESIGN_TOKENS_PATH.is_file()
+        else ""
+    )
     css = UI_STYLE_PATH.read_text(encoding="utf-8") if UI_STYLE_PATH.is_file() else ""
     ui.add_head_html(
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<style>{css}</style>"
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">'
+        '<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">'
+        f"<style>{tokens}\n{css}</style>"
     )
 
 

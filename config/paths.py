@@ -43,3 +43,6 @@ SKILLS_DIR = _bundle_root() / "skills"
 UI_STYLE_PATH = _bundle_root() / "ui" / "style.css"
 if not UI_STYLE_PATH.is_file():
     UI_STYLE_PATH = ROOT / "ui" / "style.css"
+UI_DESIGN_TOKENS_PATH = _bundle_root() / "ui" / "design_tokens.css"
+if not UI_DESIGN_TOKENS_PATH.is_file():
+    UI_DESIGN_TOKENS_PATH = ROOT / "ui" / "design_tokens.css"

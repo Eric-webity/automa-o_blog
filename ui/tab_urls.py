@@ -22,6 +22,7 @@ from services.background_jobs import (
     run_urls_job,
     should_queue_urls,
 )
+from services.article_history import index_from_url_result
 from services.blog_publisher import save_post_to_blog
 from services.browser_fetcher import browser_fetch_enabled, is_playwright_installed
 from ui.components.background_job_panel import mount_background_job_tracker
@@ -276,10 +277,11 @@ def build_tab_urls(config) -> None:
         try:
             try:
                 owner_id = require_session_user_id()
+                index_payload = index_from_url_result(result)
                 save_result = await save_post_to_blog(
                     title=title,
                     markdown_content=result.article.markdown or "",
-                    json_index=result.ai_index or None,
+                    json_index=index_payload,
                     article_id=save_state["article_id"],
                     status=ArticleStatus.DRAFT.value,
                     user_id=owner_id,
@@ -288,7 +290,7 @@ def build_tab_urls(config) -> None:
                 save_result = await save_post_to_blog(
                     title=title,
                     markdown_content=result.article.markdown or "",
-                    json_index=result.ai_index or None,
+                    json_index=index_from_url_result(result),
                     status=ArticleStatus.DRAFT.value,
                     user_id=owner_id,
                 )

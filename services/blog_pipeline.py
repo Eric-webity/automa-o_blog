@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from db.models import ArticleStatus
 from db.repository import ArticleRepository
+from services.article_history import index_from_blog_package
 from services.ai_manager import AIManager
 from services.blog import BlogBrief, BlogPostPackage, generate_blog_post
 from services.blog.brief import LONG_FORM_THRESHOLD
@@ -120,16 +122,6 @@ def _finalize_blog_result(
     )
 
 
-def _enrich_index_for_storage(package: BlogPostPackage) -> dict | None:
-    """Inclui metadados de geração no índice persistido (métricas do dashboard)."""
-    base = dict(package.ai_index or {})
-    base["used_llm"] = package.used_llm
-    base["generation_mode"] = package.generation_mode
-    if package.provider_used:
-        base["provider_used"] = package.provider_used
-    return base
-
-
 def _persist_article(
     package: BlogPostPackage,
     brief: BlogBrief,
@@ -149,13 +141,14 @@ def _persist_article(
     try:
         repo = ArticleRepository(user_id=user_id)
         title = (package.meta_title or brief.topic).strip() or "Sem título"
-        index_payload = _enrich_index_for_storage(package)
+        index_payload = index_from_blog_package(package)
         if article_id is not None:
             updated = repo.update(
                 article_id,
                 title=title,
                 markdown_content=package.markdown,
                 json_index=index_payload,
+                status=ArticleStatus.DRAFT.value,
             )
             if updated is not None:
                 return updated.id
@@ -163,6 +156,7 @@ def _persist_article(
             title=title,
             markdown_content=package.markdown,
             json_index=index_payload,
+            status=ArticleStatus.DRAFT.value,
             user_id=user_id,
         )
         return record.id

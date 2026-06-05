@@ -21,10 +21,23 @@ def _package(**kwargs) -> BlogPostPackage:
     return BlogPostPackage(**defaults)
 
 
+def _long_md(min_words: int = 900) -> str:
+    """Gera Markdown com H1, FAQ e texto longo o suficiente para passar na validação."""
+    filler = (
+        "Este parágrafo serve como conteúdo de preenchimento para atingir a meta de "
+        "palavras exigida pela validação automática de extensão do artigo. "
+    ) * 55
+    return (
+        "# Guia CRM\n\n"
+        + filler
+        + "\n\n## Perguntas frequentes\n\n### O que é?\n\nResposta de exemplo.\n"
+    )
+
+
 def test_primary_includes_h1_faq_size() -> None:
     brief = BlogBrief(topic="tema", word_count=1000, include_faq=True)
     pkg = _package(
-        markdown="# Guia CRM\n\n## Perguntas frequentes\n\n### O que é?",
+        markdown=_long_md(),
         faq_items=[{"question": "Q", "answer": "A"}],
     )
     result = BlogResult(

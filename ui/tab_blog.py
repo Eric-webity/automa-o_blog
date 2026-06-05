@@ -19,6 +19,7 @@ from services.background_jobs import (
     should_queue_blog,
 )
 from services.blog_pipeline import run_blog_pipeline, run_blog_pipeline_async
+from services.article_history import build_history_json_index, index_from_blog_package
 from services.blog_publisher import save_post_to_blog
 from ui.components.background_job_panel import mount_background_job_tracker
 from ui.components.agent_progress import AgentProgressPanel
@@ -471,10 +472,16 @@ def build_tab_blog(config) -> None:
                         else article_state["markdown"]
                     )
                     try:
+                        index_payload = index_from_blog_package(pkg)
+                        if meta:
+                            index_payload = build_history_json_index(
+                                ai_index=index_payload,
+                                meta=meta,
+                            )
                         save_result = await save_post_to_blog(
                             title=meta.get("meta_title", "") or pkg.meta_title,
                             markdown_content=content or "",
-                            json_index=pkg.ai_index or None,
+                            json_index=index_payload,
                             article_id=article_state["id"],
                             status=ArticleStatus.DRAFT.value,
                             user_id=require_session_user_id(),

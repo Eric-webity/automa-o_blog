@@ -21,6 +21,7 @@ class ArticleSplitView:
         footer: str = "",
         live_preview: bool = True,
         debounce_seconds: float = 0.35,
+        layout_class: str = "",
     ) -> None:
         self._debounce_seconds = debounce_seconds
         self._preview: ui.markdown
@@ -28,18 +29,23 @@ class ArticleSplitView:
         self._live_switch: ui.switch
         self._debounce_timer: ui.timer
 
-        with ui.column().classes("article-split-view w-full gap-2"):
-            with ui.row().classes("w-full items-center justify-between flex-wrap gap-2"):
-                ui.label("Edite o Markdown à esquerda; a pré-visualização atualiza à direita.").classes(
-                    "geo-meta-caption"
-                )
+        root_cls = "article-split-view w-full gap-2"
+        if layout_class:
+            root_cls = f"{root_cls} {layout_class}"
+        with ui.column().classes(root_cls):
+            with ui.row().classes(
+                "w-full items-center justify-between flex-wrap gap-2"
+            ):
+                ui.label(
+                    "Edite o Markdown à esquerda; a pré-visualização atualiza à direita."
+                ).classes("geo-meta-caption")
                 with ui.row().classes("items-center gap-2"):
-                    self._live_switch = ui.switch("Preview em tempo real", value=live_preview).props(
-                        "dense color=primary"
-                    )
-                    ui.button("Atualizar preview", on_click=self._refresh_preview).props(
-                        "flat dense no-caps"
-                    ).classes("geo-btn-outline").style(
+                    self._live_switch = ui.switch(
+                        "Preview em tempo real", value=live_preview
+                    ).props("dense color=primary")
+                    ui.button(
+                        "Atualizar preview", on_click=self._refresh_preview
+                    ).props("flat dense no-caps").classes("geo-btn-outline").style(
                         "padding: 0.25rem 0.75rem !important; min-height: auto !important;"
                     )
 
@@ -50,15 +56,21 @@ class ArticleSplitView:
                     ui.label("Editor").classes("article-split-view__pane-title")
                     self._editor = (
                         ui.textarea(value=markdown)
-                        .classes("w-full geo-field geo-field--textarea article-split-view__textarea")
+                        .classes(
+                            "w-full geo-field geo-field--textarea article-split-view__textarea"
+                        )
                         .props("outlined autogrow rows=18")
                     )
 
                 with ui.column().classes(
                     "article-split-view__pane article-split-view__pane--preview"
                 ):
-                    ui.label("Pré-visualização").classes("article-split-view__pane-title")
-                    with ui.element("div").classes("article-split-view__preview-scroll"):
+                    ui.label("Pré-visualização").classes(
+                        "article-split-view__pane-title"
+                    )
+                    with ui.element("div").classes(
+                        "article-split-view__preview-scroll"
+                    ):
                         self._preview = ui.markdown(
                             normalize_preview_markdown(markdown)
                         ).classes("article-split-view__markdown w-full")
@@ -68,7 +80,9 @@ class ArticleSplitView:
 
         self._editor.on("update:model-value", self._on_editor_change)
         self._live_switch.on("update:model-value", self._on_live_toggle)
-        self._debounce_timer = ui.timer(self._debounce_seconds, self._flush_preview, active=False)
+        self._debounce_timer = ui.timer(
+            self._debounce_seconds, self._flush_preview, active=False
+        )
 
     @property
     def content(self) -> str:

@@ -59,7 +59,7 @@ Há login local; as matérias ficam no banco SQLite em `data/`.
 | Pasta | Papel em linguagem simples |
 |-------|----------------------------|
 | `main.py` | Ponto de entrada: sobe a interface e registra a API |
-| `ui/` | Telas, estilos, login, abas e componentes visuais |
+| `ui/` | Telas: `pages/` (rotas), `tab_*.py` (conteúdo), `components/`, `design_tokens.css` — ver `ui/README.md` |
 | `api/` | Endpoints para integrar com outros sistemas |
 | `services/` | Regras de negócio: chamar IA, buscar URLs, gerar blog, estatísticas |
 | `core/` | Motor GEO: esqueleto, índice IA, insights, nichos, FAQ JSON-LD |

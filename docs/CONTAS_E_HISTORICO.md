@@ -11,6 +11,8 @@ O GEO Extractor guarda matérias no SQLite local (`data/`). Cada linha em `artic
 | B abre `?article=ID` de A | «Matéria não encontrada» |
 | B tenta atualizar ID de A | Repositório recusa (sem acesso) |
 | Sair e entrar com outra conta | Sessão NiceGUI nova; estado em memória das abas é reposto |
+| **Administrador** na aba Histórico | Filtro «Todas as contas» ou por **nome** do utilizador; importação pelo nome no diálogo (`ui/history_scope.py`) |
+| Utilizador comum | Não vê matérias de contas com papel **admin** |
 
 ## Sessão
 

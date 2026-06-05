@@ -99,7 +99,11 @@ def build_tab_dashboard(config) -> None:
         *,
         trend_muted: bool = False,
     ) -> None:
-        trend_cls = "geo-dash-stat-trend geo-dash-stat-trend--muted" if trend_muted else "geo-dash-stat-trend"
+        trend_cls = (
+            "geo-dash-stat-trend geo-dash-stat-trend--muted"
+            if trend_muted
+            else "geo-dash-stat-trend"
+        )
         ui.html(
             f'<div class="geo-dash-stat-card">'
             f'<div class="geo-dash-stat-bg-icon"><span class="material-symbols-outlined" '
@@ -111,18 +115,6 @@ def build_tab_dashboard(config) -> None:
             f'<span class="{trend_cls}">{trend}</span>'
             f"</div>"
         )
-
-    def _render_new_extraction_cta() -> None:
-        def on_click() -> None:
-            ui.navigate.to(ROUTE_BLOG)
-
-        with ui.element("div").classes("geo-dash-stat-card geo-dash-stat-card--cta").on(
-            "click", lambda _: on_click()
-        ):
-            with ui.element("div").classes("geo-dash-cta-icon"):
-                ui.icon("add_location_alt", size="lg")
-            ui.label("Nova matéria").classes("geo-dash-cta-title")
-            ui.label("Inicie um novo fluxo de extração e geração.").classes("geo-dash-cta-desc")
 
     def _render_featured_project(item: dict) -> None:
         status_text, status_cls, status_icon = article_status_meta(item["status"])
@@ -155,7 +147,9 @@ def build_tab_dashboard(config) -> None:
                         f"status {item['status']}."
                     ).classes("geo-dash-project-desc")
                 with ui.element("div").classes("geo-dash-project-footer"):
-                    ui.label(f"{item['word_count']} palavras").classes("text-caption text-grey-7")
+                    ui.label(f"{item['word_count']} palavras").classes(
+                        "text-caption text-grey-7"
+                    )
                     with ui.element("div").classes("geo-dash-progress-row"):
                         ui.label(f"{progress}%").classes("text-caption text-grey-7")
                         with ui.element("div").classes("geo-dash-progress-bar"):
@@ -189,9 +183,10 @@ def build_tab_dashboard(config) -> None:
                         ui.html(f'<span class="geo-dash-tag">{item["status"]}</span>')
                 with ui.element("div").classes("geo-dash-project-footer"):
                     ui.label(item["created_at"]).classes("text-caption text-grey-7")
-                    ui.button(icon="open_in_new", on_click=lambda i=item["id"]: _open_article(config, i)).props(
-                        "flat round dense color=primary"
-                    )
+                    ui.button(
+                        icon="open_in_new",
+                        on_click=lambda i=item["id"]: _open_article(config, i),
+                    ).props("flat round dense color=primary")
 
     def _render_ai_cost_panel(ai_usage: dict) -> None:
         ai_cost_container.clear()
@@ -229,7 +224,9 @@ def build_tab_dashboard(config) -> None:
                         ).classes("geo-meta-caption")
 
             if by_provider:
-                ui.label("Por provedor (30 dias)").classes("geo-section-title mt-4 mb-2")
+                ui.label("Por provedor (30 dias)").classes(
+                    "geo-section-title mt-4 mb-2"
+                )
                 max_cost = max((p.get("cost_usd") or 0) for p in by_provider) or 0.0001
                 with ui.element("div").classes("geo-ai-cost-providers w-full"):
                     for row in by_provider:
@@ -240,9 +237,9 @@ def build_tab_dashboard(config) -> None:
                                 "w-full items-center justify-between gap-2 mb-1"
                             ):
                                 ui.label(name).classes("text-body2")
-                                ui.label(format_cost_usd(row.get("cost_usd", 0))).classes(
-                                    "text-caption font-medium"
-                                )
+                                ui.label(
+                                    format_cost_usd(row.get("cost_usd", 0))
+                                ).classes("text-caption font-medium")
                             with ui.element("div").classes("geo-usage-bar"):
                                 ui.element("div").classes("geo-usage-bar__fill").style(
                                     f"width: {pct}%"
@@ -293,7 +290,11 @@ def build_tab_dashboard(config) -> None:
             _render_stat_card(
                 "Total de matérias",
                 _format_stat(total),
-                f"+{week_count} nos últimos 7 dias" if week_count else "Sem novidades recentes",
+                (
+                    f"+{week_count} nos últimos 7 dias"
+                    if week_count
+                    else "Sem novidades recentes"
+                ),
                 "analytics",
                 "dataset",
                 trend_muted=week_count == 0,
@@ -301,7 +302,11 @@ def build_tab_dashboard(config) -> None:
             _render_stat_card(
                 "Geradas com IA",
                 _format_stat(llm),
-                f"{ready_count} provedor(es) prontos" if ready_count else "Configure IA em Settings",
+                (
+                    f"{ready_count} provedor(es) prontos"
+                    if ready_count
+                    else "Configure IA em Settings"
+                ),
                 "memory",
                 "api",
                 trend_muted=ready_count == 0,
@@ -324,13 +329,13 @@ def build_tab_dashboard(config) -> None:
                 "savings",
                 trend_muted=not (data.get("ai_usage") or {}).get("has_data"),
             )
-            _render_new_extraction_cta()
-
         recent = data.get("recent_articles") or []
         with projects_container:
             if not recent:
                 ui.label("Nenhuma matéria salva ainda.").classes("text-grey-7")
-                with ui.element("div").classes("geo-dash-project-card geo-dash-project-card--compact"):
+                with ui.element("div").classes(
+                    "geo-dash-project-card geo-dash-project-card--compact"
+                ):
                     with ui.element("div").classes("geo-dash-project-body"):
                         ui.label("Comece agora").classes("geo-dash-project-title")
                         ui.label(
@@ -355,11 +360,21 @@ def build_tab_dashboard(config) -> None:
                     (settings.api_enabled, "API ativa", "API desativada"),
                     (data.get("api_key_configured"), "Chave API OK", "Sem chave API"),
                     (data.get("webhook_configured"), "Webhook OK", "Webhook ausente"),
-                    (data.get("cms_configured"), "CMS externo OK", "CMS não configurado"),
+                    (
+                        data.get("cms_configured"),
+                        "CMS externo OK",
+                        "CMS não configurado",
+                    ),
                 )
                 for ok, ok_text, fail_text in badges:
-                    css = "geo-status-badge geo-status-badge--ok" if ok else "geo-status-badge geo-status-badge--warn"
-                    ui.html(f'<span class="{css}">{ok_text if ok else fail_text}</span>')
+                    css = (
+                        "geo-status-badge geo-status-badge--ok"
+                        if ok
+                        else "geo-status-badge geo-status-badge--warn"
+                    )
+                    ui.html(
+                        f'<span class="{css}">{ok_text if ok else fail_text}</span>'
+                    )
 
             ready = data.get("ready_providers") or []
             if ready:
@@ -382,7 +397,11 @@ def build_tab_dashboard(config) -> None:
                 if api_ok
                 else "Health falhou"
             )
-            css = "geo-status-badge geo-status-badge--ok" if api_ok else "geo-status-badge geo-status-badge--warn"
+            css = (
+                "geo-status-badge geo-status-badge--ok"
+                if api_ok
+                else "geo-status-badge geo-status-badge--warn"
+            )
             ui.html(f'<span class="{css}">{api_label}</span>')
             cache_line = ""
             if data.get("url_cache_enabled"):
@@ -405,7 +424,9 @@ def build_tab_dashboard(config) -> None:
                         f'<div class="geo-dash-api-route">{method} {path} — {desc}</div>'
                     )
 
-            with ui.expansion("Webhook (notificações)", icon="webhook").classes("w-full"):
+            with ui.expansion("Webhook (notificações)", icon="webhook").classes(
+                "w-full"
+            ):
                 build_webhook_panel()
 
             with ui.expansion("CMS externo", icon="cloud_upload").classes("w-full"):

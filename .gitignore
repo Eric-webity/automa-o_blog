@@ -39,3 +39,8 @@ models/
 
 # NiceGUI / logs
 .nicegui/
+
+# Test cache
+.pytest_cache/
+htmlcov/
+.coverage

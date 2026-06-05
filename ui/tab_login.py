@@ -2,56 +2,44 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from nicegui import ui
 
 from ui.auth import authenticate
 
 
 def render_login_gate(config, on_success, on_signup=None) -> None:
-    """Formulário de login em ecrã completo."""
-    with ui.element("div").classes("geo-login-shell w-full"):
-        with ui.element("div").classes("geo-login-page w-full"):
-            with ui.element("div").classes("geo-login-card"):
-                with ui.element("div").classes("geo-login-card__wave"):
-                    ui.html(
-                        """
-<svg viewBox="0 0 1000 648" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="geoLoginGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#8b5cf6"/>
-      <stop offset="100%" style="stop-color:#3b82f6"/>
-    </linearGradient>
-  </defs>
-  <path d="M1000,0 L400,0 C550,150 400,300 600,450 C700,550 500,600 300,648 L1000,648 Z" fill="url(#geoLoginGrad)"/>
-  <path d="M0,0 L400,0 C550,150 400,300 600,450 C700,550 500,600 300,648 L0,648 Z" fill="#ffffff"/>
-</svg>
-                        """
-                    )
+    """Formulário de login em ecrã completo (layout split + painel de marca)."""
+    year = datetime.now().year
 
-                with ui.element("section").classes("geo-login-form"):
-                    with ui.element("div").classes("geo-login-brand"):
-                        with ui.element("div").classes("geo-login-brand__icon"):
+    with ui.element("div").classes("geo-auth-shell w-full"):
+        with ui.element("main").classes("geo-auth-main"):
+            with ui.element("div").classes("geo-auth-card"):
+                with ui.element("div").classes("geo-auth-card__form"):
+                    with ui.element("div").classes("geo-auth-brand"):
+                        with ui.element("div").classes("geo-auth-brand__icon"):
                             ui.icon("location_on")
                         with ui.column().classes("gap-0"):
-                            ui.label("GEO Extractor").classes("geo-login-brand__title")
-                            ui.label("Content Studio").classes("geo-login-brand__tag")
+                            ui.label("GEO Extractor").classes("geo-auth-brand__title")
+                            ui.label("Content Studio").classes("geo-auth-brand__tag")
 
-                    with ui.element("div").classes("geo-login-header"):
-                        ui.label("Olá!").classes("geo-login-header__title")
-                        ui.label("Entre na sua conta").classes("geo-login-header__subtitle")
+                    with ui.element("div").classes("geo-auth-intro"):
+                        ui.label("Olá!").classes("geo-auth-intro__title")
+                        ui.label("Entre na sua conta").classes("geo-auth-intro__subtitle")
 
-                    with ui.element("div").classes("geo-login-fields"):
-                        with ui.element("div").classes("geo-login-neu-field"):
-                            with ui.element("div").classes("geo-login-neu-field__icon"):
+                    with ui.element("div").classes("geo-auth-fields"):
+                        with ui.element("div").classes("geo-auth-field"):
+                            with ui.element("div").classes("geo-auth-field__icon"):
                                 ui.icon("mail", size="sm")
                             email = (
                                 ui.input(placeholder="E-mail")
-                                .classes("w-full")
+                                .classes("w-full geo-auth-input")
                                 .props("borderless dense type=email autofocus")
                             )
 
-                        with ui.element("div").classes("geo-login-neu-field"):
-                            with ui.element("div").classes("geo-login-neu-field__icon"):
+                        with ui.element("div").classes("geo-auth-field"):
+                            with ui.element("div").classes("geo-auth-field__icon"):
                                 ui.icon("lock", size="sm")
                             password = (
                                 ui.input(
@@ -59,16 +47,17 @@ def render_login_gate(config, on_success, on_signup=None) -> None:
                                     password=True,
                                     password_toggle_button=True,
                                 )
-                                .classes("w-full")
+                                .classes("w-full geo-auth-input")
                                 .props("borderless dense")
                             )
 
-                    with ui.element("div").classes("geo-login-options"):
-                        ui.checkbox("Lembrar-me").props("dense size=xs color=primary")
-                        ui.link("Esqueceu a senha?", "#").classes("text-xs")
+                    with ui.element("div").classes("geo-auth-options"):
+                        ui.checkbox("Lembrar-me").props("dense size=sm color=primary").classes(
+                            "geo-auth-checkbox"
+                        )
+                        ui.link("Esqueceu a senha?", "#").classes("geo-auth-link")
 
-                    with ui.element("div").classes("geo-login-submit-row"):
-                        submit_btn = ui.button("Entrar").classes("geo-login-submit-btn")
+                    submit_btn = ui.button("Entrar").classes("geo-auth-submit-btn w-full")
 
                     def login() -> None:
                         submit_btn.disable()
@@ -88,18 +77,24 @@ def render_login_gate(config, on_success, on_signup=None) -> None:
                     email.on("keydown.enter", login)
                     password.on("keydown.enter", login)
 
-                    with ui.row().classes("geo-login-footer items-center justify-center gap-1"):
-                        ui.label("Não tem conta?").classes("text-xs text-grey-7")
-                        if on_signup:
+                    if on_signup:
+                        with ui.row().classes("geo-auth-switch items-center justify-center gap-1"):
+                            ui.label("Não tem conta?").classes("geo-auth-switch__text")
                             ui.button("Criar conta", on_click=on_signup).props(
                                 "flat no-caps dense color=primary"
-                            ).classes("geo-signup-login-link")
-                        else:
-                            ui.label("Em breve").classes("text-xs text-grey-6")
+                            ).classes("geo-auth-switch__btn")
 
-                with ui.element("section").classes("geo-login-welcome"):
-                    ui.label("Bem-vindo de volta!").classes("geo-login-welcome__title")
-                    ui.label(
-                        "Aceda ao GEO Extractor Content Studio para gerar matérias, "
-                        "processar URLs e publicar no seu blog local."
-                    ).classes("geo-login-welcome__text")
+                with ui.element("div").classes("geo-auth-card__panel"):
+                    with ui.element("div").classes("geo-auth-panel__content"):
+                        ui.label("Bem-vindo de volta!").classes("geo-auth-panel__title")
+                        ui.label(
+                            "Aceda ao GEO Extractor Content Studio para gerar matérias, "
+                            "processar URLs e publicar no seu blog local."
+                        ).classes("geo-auth-panel__text")
+
+        with ui.element("footer").classes("geo-auth-footer"):
+            ui.label(f"© {year} GEO Extractor Content Studio").classes("geo-auth-footer__copy")
+            with ui.row().classes("geo-auth-footer__links gap-4"):
+                ui.link("Termos", "#").classes("geo-auth-footer__link")
+                ui.link("Privacidade", "#").classes("geo-auth-footer__link")
+                ui.link("Suporte", "#").classes("geo-auth-footer__link")

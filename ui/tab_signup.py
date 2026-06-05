@@ -9,8 +9,8 @@ from ui.auth import register_user
 
 def _signup_field(label: str, icon: str, placeholder: str, **input_kwargs) -> ui.input:
     ui.label(label).classes("geo-signup-field-label")
-    with ui.element("div").classes("geo-signup-field"):
-        with ui.element("div").classes("geo-signup-field__icon"):
+    with ui.element("div").classes("geo-auth-field geo-signup-field"):
+        with ui.element("div").classes("geo-auth-field__icon geo-signup-field__icon"):
             ui.icon(icon)
         field = ui.input(placeholder=placeholder, **input_kwargs).classes("w-full").props(
             "borderless dense"
@@ -20,36 +20,20 @@ def _signup_field(label: str, icon: str, placeholder: str, **input_kwargs) -> ui
 
 def render_signup_gate(config, on_success, on_login) -> None:
     """Formulário de cadastro em ecrã completo."""
-    with ui.element("div").classes("geo-login-shell w-full"):
-        with ui.element("div").classes("geo-signup-page w-full"):
-            with ui.element("div").classes("geo-signup-card"):
-                with ui.element("div").classes("geo-signup-card__wave"):
-                    ui.html(
-                        """
-<svg viewBox="0 0 1000 648" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="geoSignupGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4648d4"/>
-      <stop offset="100%" style="stop-color:#8127cf"/>
-    </linearGradient>
-  </defs>
-  <path d="M1000,0 L400,0 C550,150 400,300 600,450 C700,550 500,600 300,648 L1000,648 Z" fill="url(#geoSignupGrad)"/>
-  <path d="M0,0 L400,0 C550,150 400,300 600,450 C700,550 500,600 300,648 L0,648 Z" fill="#ffffff"/>
-</svg>
-                        """
-                    )
-
-                with ui.element("section").classes("geo-signup-form"):
-                    with ui.element("div").classes("geo-signup-header"):
-                        with ui.element("div").classes("geo-login-brand"):
-                            with ui.element("div").classes("geo-login-brand__icon"):
-                                ui.icon("language")
-                            with ui.column().classes("gap-0"):
-                                ui.label("GEO Extractor").classes("geo-login-brand__title")
-                                ui.label("Content Studio").classes("geo-login-brand__tag")
-                        ui.label("Crie sua conta").classes("geo-signup-header__title")
+    with ui.element("div").classes("geo-auth-shell w-full"):
+        with ui.element("main").classes("geo-auth-main"):
+            with ui.element("div").classes("geo-auth-card geo-signup-card"):
+                with ui.element("section").classes("geo-auth-card__form geo-signup-form"):
+                    with ui.element("div").classes("geo-auth-brand geo-login-brand"):
+                        with ui.element("div").classes("geo-auth-brand__icon geo-login-brand__icon"):
+                            ui.icon("location_on")
+                        with ui.column().classes("gap-0"):
+                            ui.label("GEO Extractor").classes("geo-auth-brand__title geo-login-brand__title")
+                            ui.label("Content Studio").classes("geo-auth-brand__tag geo-login-brand__tag")
+                    with ui.element("div").classes("geo-auth-intro geo-signup-header"):
+                        ui.label("Crie sua conta").classes("geo-auth-intro__title geo-signup-header__title")
                         ui.label("Comece sua jornada no Content Studio hoje.").classes(
-                            "geo-signup-header__subtitle"
+                            "geo-auth-intro__subtitle geo-signup-header__subtitle"
                         )
 
                     name = _signup_field(
@@ -99,7 +83,7 @@ def render_signup_gate(config, on_success, on_login) -> None:
 
                     ui.button("Criar minha conta", icon="arrow_forward", on_click=submit).props(
                         "no-caps unelevated"
-                    ).classes("geo-signup-submit-btn w-full")
+                    ).classes("geo-auth-submit-btn geo-signup-submit-btn w-full")
 
                     with ui.element("div").classes("geo-signup-divider"):
                         ui.label("OU CADASTRE COM").classes("geo-signup-divider__text")
@@ -124,7 +108,7 @@ def render_signup_gate(config, on_success, on_login) -> None:
                             "flat no-caps dense color=primary"
                         ).classes("geo-signup-login-link")
 
-                with ui.element("section").classes("geo-signup-brand"):
+                with ui.element("section").classes("geo-auth-card__panel geo-signup-brand"):
                     ui.html('<span class="geo-signup-brand__badge">Content Studio v2.0</span>')
                     ui.label("Construa o futuro da extração GEO.").classes(
                         "geo-signup-brand__title"

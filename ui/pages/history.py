@@ -18,6 +18,9 @@ def register(config) -> None:
                 try:
                     article_id = int(article)
                 except (TypeError, ValueError):
+                    ui.notify(
+                        f"ID de matéria inválido: «{article}».", type="warning"
+                    )
                     return
                 opener = getattr(cfg, "open_history_article", None)
                 if opener:

@@ -10,6 +10,7 @@ from nicegui import run, ui
 
 from core.insight_extractor import extract_insights_from_text, merge_insights
 from db.models import ArticleStatus
+from services.article_history import index_from_url_result
 from services.blog_publisher import save_post_to_blog
 from services.background_jobs import (
     JobKind,
@@ -186,10 +187,11 @@ def build_tab_text(config) -> None:
         owner_id = require_session_user_id()
         try:
             try:
+                index_payload = index_from_url_result(result)
                 save_result = await save_post_to_blog(
                     title=title,
                     markdown_content=result.article.markdown or "",
-                    json_index=result.ai_index or None,
+                    json_index=index_payload,
                     article_id=save_state["article_id"],
                     status=ArticleStatus.DRAFT.value,
                     user_id=owner_id,
@@ -198,7 +200,7 @@ def build_tab_text(config) -> None:
                 save_result = await save_post_to_blog(
                     title=title,
                     markdown_content=result.article.markdown or "",
-                    json_index=result.ai_index or None,
+                    json_index=index_from_url_result(result),
                     status=ArticleStatus.DRAFT.value,
                     user_id=owner_id,
                 )

@@ -52,3 +52,26 @@ def test_promote_user_to_admin() -> None:
     user = UserRepository().create(name="B", email="b@test.com", password="senha12345")
     updated = UserRepository().set_role(user.id, UserRole.ADMIN.value)
     assert updated.role == UserRole.ADMIN.value
+
+
+def test_update_user_and_delete() -> None:
+    UserRepository().create(name="Admin", email="admin@test.com", password="senha12345")
+    user = UserRepository().create(name="B", email="b@test.com", password="senha12345")
+    updated = UserRepository().update(
+        user.id,
+        name="Bruno",
+        email="bruno@test.com",
+        role=UserRole.USER.value,
+        password="novaSenha123",
+    )
+    assert updated.name == "Bruno"
+    assert updated.email == "bruno@test.com"
+    assert UserRepository().verify_credentials("bruno@test.com", "novaSenha123")
+    assert UserRepository().delete(user.id) is True
+    assert UserRepository().get_by_id(user.id) is None
+
+
+def test_cannot_delete_last_admin() -> None:
+    admin = UserRepository().create(name="A", email="a@test.com", password="senha12345")
+    with pytest.raises(ValueError, match="último administrador"):
+        UserRepository().delete(admin.id)
